@@ -1,0 +1,19 @@
+[package]
+name = "hls-playlist"
+description = "A library for parsing HLS playlists (aka extended M3U playlists)."
+version = "0.1.0"
+edition = "2021"
+authors = ["Logan Wemyss"]
+repository = "https://github.com/raibu-stream/hls-playlist"
+license = "Apache-2.0"
+keywords = ["hls", "parse", "m3u", "extm3u"]
+categories = ["parser-implementations"]
+
+[dependencies]
+serde = { version = "1.0.201", optional = true }
+serde_json = { version = "1.0.117", optional = true }
+thiserror = { version = "1.0.60", optional = true }
+
+[features]
+default = ["steering-manifest"]
+steering-manifest = ["dep:serde", "dep:serde_json", "dep:thiserror"]

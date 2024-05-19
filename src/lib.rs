@@ -15,7 +15,7 @@
 #![warn(clippy::pedantic, clippy::nursery, clippy::enum_glob_use)]
 #![allow(clippy::module_name_repetitions, clippy::too_many_lines)]
 
-use std::{num::NonZeroU8, time::SystemTime};
+use std::{collections::HashMap, num::NonZeroU8, time::SystemTime};
 
 pub mod playlist;
 pub mod tags;
@@ -98,9 +98,17 @@ pub struct StreamInf {
     /// Represents the average segment bit rate of the Stream.
     pub average_bandwidth_bits_per_second: Option<u64>,
 
+    /// An abstract, relative measure of the playback quality-of-experience
+    /// of the Variant Stream.
+    pub score: Option<f64>,
+
     /// A list of formats, where each format specifies a media sample type
     /// that is present in the Stream.
     pub codecs: Vec<String>,
+
+    /// Describes media samples with both a backward-compatible base layer
+    /// and a newer enhancement layer.
+    pub supplemental_codecs: Vec<SupplementalCodec>,
 
     /// Describes the optimal pixel resolution at which to display the
     /// video in the Stream.
@@ -109,14 +117,6 @@ pub struct StreamInf {
     /// Indicates that the stream could fail to play unless the
     /// output is protected by High-bandwidth Digital Content Protection.
     pub hdcp_level: Option<HdcpLevel>,
-
-    /// An abstract, relative measure of the playback quality-of-experience
-    /// of the Variant Stream.
-    pub score: Option<f64>,
-
-    /// Describes media samples with both a backward-compatible base layer
-    /// and a newer enhancement layer.
-    pub supplemental_codecs: Vec<SupplementalCodec>,
 
     /// Indicates that the playback of the stream containing encrypted
     /// `MediaSegments` is to be restricted to devices that guarantee
@@ -140,18 +140,9 @@ pub struct StreamInf {
 /// Describes media samples with both a backward-compatible base layer
 /// and a newer enhancement layer.
 #[derive(Debug, Clone, PartialEq, Eq)]
-pub enum SupplementalCodec {
-    CodecOnly {
-        /// The base layer codec.
-        supplemental_codec: String,
-    },
-    WithCompatibilityBrands {
-        /// The base layer codec.
-        supplemental_codec: String,
-
-        /// Compatibility brands that pertain to the `supplemental_codec`'s bitstream.
-        compatibility_brands: Vec<String>,
-    },
+pub struct SupplementalCodec {
+    supplemental_codec: String,
+    compatibility_brands: Vec<String>,
 }
 
 /// The High-bandwidth Digital Content Protection level.
@@ -177,11 +168,11 @@ pub struct Resolution {
 /// Represents required content protection robustness for a given `key_format`
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentProtectionConfiguration {
-    key_format: String,
+    pub key_format: String,
 
     /// Classes of playback device that implements the `key_format`
     /// with a certain level of content protection robustness.
-    cpc_label: Vec<String>,
+    pub cpc_label: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -203,10 +194,10 @@ pub enum VideoChannelSpecifier {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SessionData {
     /// Identifies a particular `SessionData`.
-    data_id: String,
+    pub data_id: String,
 
     /// The data value.
-    value: crate::SessionDataValue,
+    pub value: crate::SessionDataValue,
 }
 
 /// Whether the data is stored inline or identified by a URI.
@@ -272,9 +263,6 @@ pub enum EncryptionMethod {
         /// A URI that specifies how to obtain the key.
         uri: String,
 
-        /// Specifies an initialization vector to be used with the key.
-        iv: Option<u128>,
-
         /// Which versions of the `key_format` are this key is in compliance with.
         key_format_versions: Vec<u64>,
     },
@@ -291,57 +279,62 @@ pub enum KeyFormat {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentSteering {
     /// The URI identifying the [`crate::steering_manifest::SteeringManifest`].
-    server_uri: String,
-    pathway_id: String,
+    pub server_uri: String,
+    pub pathway_id: Option<String>,
 }
 
 /// A duration of time with specific attributes.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DateRange {
     /// Uniquely identifies the `DateRange` in a given Playlist.
-    id: String,
+    pub id: String,
+
+    /// Identifies some set of attributes and their associated value semantics
+    /// for `client_attributes`.
+    pub class: Option<String>,
 
     /// The time at which the `DateRange` begins.
-    start_date: SystemTime,
+    pub start_date: SystemTime,
 
     /// Indicates when to trigger an action associated with the `DateRange`.
-    cue: Option<DateRangeCue>,
+    pub cue: Option<DateRangeCue>,
 
     /// The time at which the `DateRange` ends.
-    end_date: Option<SystemTime>,
+    pub end_date: Option<SystemTime>,
 
     /// The duration of the `DateRange` in seconds.
-    duration_seconds: Option<f64>,
+    pub duration_seconds: Option<f64>,
 
     /// The duration that the `DateRange` is expected to be in seconds.
-    planned_duration_seconds: Option<f64>,
+    pub planned_duration_seconds: Option<f64>,
 
-    /// Various client defined attributes.
-    client_attributes: Option<Vec<(String, AttributeValue)>>,
-
-    /// Used to carry SCTE-35 data.
-    scte35_cmd: Option<Vec<u8>>,
+    /// Various client defined attributes. Keys are prefixed with `X-` and
+    /// unprefixed on serialization and deserialization respectively.
+    pub client_attributes: HashMap<String, AttributeValue>,
 
     /// Used to carry SCTE-35 data.
-    scte35_in: Option<Vec<u8>>,
+    pub scte35_cmd: Option<Vec<u8>>,
+
+    /// Used to carry SCTE-35 data.
+    pub scte35_in: Option<Vec<u8>>,
 
     /// Used to carry SCTE-35 data
-    scte35_out: Option<Vec<u8>>,
+    pub scte35_out: Option<Vec<u8>>,
 
     /// Indicates that the end of the `DateRange` is equal to the `start_date`
     /// of the range that is closest in time after this `DateRange` and has the same schema
     /// of `client_attributes`.
-    end_on_next: bool,
+    pub end_on_next: bool,
 }
 
 /// When to trigger an action associated with a given `DateRange`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct DateRangeCue {
     /// Indicates that an action is to be triggered once and never again.
-    once: bool,
+    pub once: bool,
 
     /// The relative time at which the action is to be triggered.
-    position: DateRangeCuePosition,
+    pub position: DateRangeCuePosition,
 }
 
 /// The relative time at which a given `DateRange` action is to be triggered.
@@ -370,19 +363,19 @@ pub enum AttributeValue {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PreloadHint {
     /// Whether the resource is a `PartialSegment` or a `MediaInitializationSection`.
-    hint_type: PreloadHintType,
+    pub hint_type: PreloadHintType,
 
     /// The URI to the hinted resource.
-    uri: String,
+    pub uri: String,
 
     /// The byte offset of the first byte of the hinted resource, from
     /// the beginning of the resource identified by the URI.
-    start_byte_offset: u64,
+    pub start_byte_offset: u64,
 
     /// If Some, the value is the length of the hinted resource.
     /// If None, the last byte of the hinted resource is the last byte of the
     /// resource identified by the URI.
-    length_in_bytes: Option<u64>,
+    pub length_in_bytes: Option<u64>,
 }
 
 /// Whether a given resource is a `PartialSegment` or a `MediaInitializationSection`.
@@ -428,11 +421,11 @@ pub enum PlaylistType {
 /// Information about the server's playlist delta update capabilities.
 #[derive(Debug, Clone, PartialEq)]
 pub struct DeltaUpdateInfo {
-    skip_boundary_seconds: f64,
+    pub skip_boundary_seconds: f64,
 
     /// if the Server can produce Playlist Delta Updates that skip
     /// older EXT-X-DATERANGE tags in addition to Media Segments.
-    can_skip_dateranges: bool,
+    pub can_skip_dateranges: bool,
 }
 
 // TODO: Can we fill in these fields when deserializing a playlist?
@@ -451,4 +444,25 @@ pub struct RenditionReport {
     /// specified rendition whose media sequence number is equal to
     /// `last_sequence_number`.
     pub last_part_index: Option<u64>,
+}
+
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum DefinitionType {
+    /// The variable is defined here.
+    Inline { name: String, value: String },
+
+    /// Use a variable defined in the Multivariant Playlist that referenced
+    /// this playlist.
+    Import { name: String },
+
+    /// Use the value of the query parameter named `name` from the current
+    /// playlist's URI. If the URI is redirected, look for the query
+    /// parameter in the 30x response URI.
+    QueryParameter { name: String },
+}
+
+#[derive(Debug, Clone, PartialEq)]
+pub enum FloatOrInteger {
+    Float(f64),
+    Integer(u64),
 }

@@ -14,13 +14,9 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::time::SystemTime;
+use std::{io, time::SystemTime};
 
-/// Either a `MultivariantPlaylist` or `MediaPlaylist`.
-pub enum Playlist {
-    Master(MultivariantPlaylist),
-    Media(MediaPlaylist),
-}
+use crate::tags::Tag;
 
 /// A playlist representing a list of renditions and variants of a given piece of media.
 pub struct MultivariantPlaylist {
@@ -34,7 +30,7 @@ pub struct MultivariantPlaylist {
     /// A list of name value pairs where the name can be substituted for the
     /// value (e.g. `{$<name>}`) in URI lines, quoted string attribute list
     /// values, and hexadecimal-sequence attribute values.
-    pub variables: Vec<(String, String)>,
+    pub variables: Vec<crate::DefinitionType>,
 
     /// Groups of renditions that are all alternative renditions of the same content.
     pub renditions_groups: Vec<RenditionGroup>,
@@ -100,106 +96,106 @@ pub enum RenditionGroup {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct VideoRendition {
     /// Information about this rendition.
-    info: RenditionInfo,
+    pub info: RenditionInfo,
 
     /// The URI that identifies the Media Playlist file.
-    uri: Option<String>,
+    pub uri: Option<String>,
 }
 
 /// A audio rendition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct AudioRendition {
     /// The audio bit depth of the rendition.
-    bit_depth: Option<u64>,
+    pub bit_depth: Option<u64>,
 
     /// The audio sample rate of the rendition.
-    sample_rate: Option<u64>,
+    pub sample_rate: Option<u64>,
 
     /// Information about the audio channels in the rendition.
-    channels: Option<crate::AudioChannelInformation>,
+    pub channels: Option<crate::AudioChannelInformation>,
 
     /// Information about this rendition.
     info: RenditionInfo,
 
     /// The URI that identifies the Media Playlist file.
-    uri: Option<String>,
+    pub uri: Option<String>,
 }
 
 /// A subtitle rendition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SubtitleRendition {
     /// Information about this rendition.
-    info: RenditionInfo,
+    pub info: RenditionInfo,
 
     /// The URI that identifies the Media Playlist file.
-    uri: String,
+    pub uri: String,
 }
 
 /// A closed caption rendition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ClosedCaptionRendition {
-    in_stream_id: crate::InStreamId,
+    pub in_stream_id: crate::InStreamId,
 
     /// The priority in which this rendition should be chosen over another rendition.
-    priority: crate::RenditionPlaybackPriority,
+    pub priority: crate::RenditionPlaybackPriority,
 
     /// Information about this rendition.
-    info: RenditionInfo,
+    pub info: RenditionInfo,
 }
 
 /// Information about a given rendition.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenditionInfo {
     /// A RFC5646 tag which identifies the primary language used in the Rendition.
-    language: Option<String>,
+    pub language: Option<String>,
 
     /// A RFC5646 tag which identifies a language that is associated with the Rendition.
-    assoc_language: Option<String>,
+    pub assoc_language: Option<String>,
 
     /// A human-readable description of the Rendition.
-    name: String,
+    pub name: String,
 
     /// Indicates that the client may choose to play this Rendition in the absence
     /// of explicit user preference because it matches the current playback environment,
     /// such as chosen system language.
-    can_auto_select: bool,
+    pub can_auto_select: bool,
 
     /// Media Characteristic Tags that indicate individual characteristics of this Rendition.
-    characteristics: Vec<String>,
+    pub characteristics: Vec<String>,
 
     /// Allows the URI of a Rendition to change between two distinct downloads of
     /// the `MultivariantPlaylist`.
-    stable_rendition_id: Option<String>,
+    pub stable_rendition_id: Option<String>,
 }
 
 /// A set of Renditions that can be combined to play the presentation.
 #[derive(Debug, Clone, PartialEq)]
 pub struct VariantStream {
     /// Metadata for the stream.
-    stream_info: crate::StreamInf,
+    pub stream_info: crate::StreamInf,
 
     /// Describes the maximum frame rate for all the video in the
     /// `VariantStream`.
-    frame_rate: Option<f64>,
+    pub frame_rate: Option<f64>,
 
     /// The group id of the audio [`RenditionGroup`] that should be used when
     /// playing the presentation.
-    audio_group_id: Option<String>,
+    pub audio_group_id: Option<String>,
 
     /// The group id of the video [`RenditionGroup`] that should be used when
     /// playing the presentation.
-    video_group_id: Option<String>,
+    pub video_group_id: Option<String>,
 
     /// The group id of the subtitle [`RenditionGroup`] that should be used when
     /// playing the presentation.
-    subtitles_group_id: Option<String>,
+    pub subtitles_group_id: Option<String>,
 
     /// The group id of the closed caption [`RenditionGroup`] that should be used when
     /// playing the presentation.
-    closed_captions_group_id: Option<String>,
+    pub closed_captions_group_id: Option<String>,
 
     /// The `MediaPlaylist` that carries a Rendition of the Variant Stream.
-    uri: String,
+    pub uri: String,
 }
 
 /// Identifies a `MediaPlaylist` containing the I-frames of a multimedia
@@ -207,14 +203,14 @@ pub struct VariantStream {
 #[derive(Debug, Clone, PartialEq)]
 pub struct IFrameStream {
     /// The metadata for this stream.
-    stream_info: crate::StreamInf,
+    pub stream_info: crate::StreamInf,
 
     /// The group id of the video [`RenditionGroup`] that should be used when
     /// playing the presentation.
-    video_group_id: Option<String>,
+    pub video_group_id: Option<String>,
 
     /// The URI that identifies the I-frame `MediaPlaylist` file.
-    uri: String,
+    pub uri: String,
 }
 
 /// A playlist representing a list of `MediaSegment`s and relevant information.
@@ -242,11 +238,6 @@ pub struct MediaPlaylist {
     /// less than or equal to the Target Duration.
     pub target_duration: u64,
 
-    /// An upper bound on the duration of all Partial Segments in the Playlist.
-    /// The duration of each Media Segment in a Playlist file, when rounded
-    /// to the nearest integer, MUST be less than or equal to the Target Duration.
-    pub part_target_duration: Option<u64>,
-
     /// The media sequence number of the first segment in [`MediaPlaylist::segments`].
     pub first_media_sequence_number: u64,
     // pub discontinuity_sequence_number: todo!(), // TODO: What is this?
@@ -263,11 +254,6 @@ pub struct MediaPlaylist {
     /// If None, this is set to `target_duration * 3`.
     pub hold_back_seconds: Option<f64>,
 
-    /// If Some, indicates the server-recommended minimum distance from
-    /// the end of the Playlist at which clients should begin to play
-    /// or to which they should seek when playing in Low-Latency Mode.
-    pub part_hold_back_seconds: Option<f64>,
-
     /// True if each Media Segment in the Playlist describes a single I-frame.
     pub iframes_only: bool,
 
@@ -277,9 +263,26 @@ pub struct MediaPlaylist {
     /// True if the server supports blocking playlist reloads.
     pub supports_blocking_playlist_reloads: bool,
 
+    /// Information about the `PartialSegments` in this playlist.
+    pub part_information: Option<PartInformation>,
+
     /// Information about the playlist that is not associated with
     /// specific Media Segments.
     pub metadata: MediaMetadata,
+}
+
+/// Information about `PartialSegments` in a given playlist.
+#[derive(Debug, Clone, PartialEq)]
+pub struct PartInformation {
+    /// If Some, indicates the server-recommended minimum distance from
+    /// the end of the Playlist at which clients should begin to play
+    /// or to which they should seek when playing in Low-Latency Mode.
+    pub part_hold_back_seconds: f64,
+
+    /// An upper bound on the duration of all Partial Segments in the Playlist.
+    /// The duration of each Media Segment in a Playlist file, when rounded
+    /// to the nearest integer, MUST be less than or equal to the Target Duration.
+    pub part_target_duration: u64,
 }
 
 /// Information about the playlist that is not associated with
@@ -287,84 +290,78 @@ pub struct MediaPlaylist {
 #[derive(Debug, Clone, PartialEq)]
 pub struct MediaMetadata {
     /// A duration of time with specific attributes.
-    date_ranges: Vec<crate::DateRange>,
+    pub date_ranges: Vec<crate::DateRange>,
 
     /// If Some, this indicates information about skipped `MediaSegments`.
     /// If None, there are no skipped `MediaSegments`.
-    skip: Option<SkipInformation>,
+    pub skip: Option<SkipInformation>,
 
     /// Hints that the client should request a resource before
     /// it is available to be delivered.
-    preload_hints: Vec<crate::PreloadHint>,
+    pub preload_hints: Vec<crate::PreloadHint>,
 
     /// Information about an associated Renditions that is as up-to-date as
     /// the Playlist that contains the report.
-    rendition_reports: Vec<crate::RenditionReport>,
+    pub rendition_reports: Vec<crate::RenditionReport>,
 }
 
 /// Information about skipped `MediaSegments`.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct SkipInformation {
     /// The number of `MediaSegments` that have been skipped.
-    number_of_skipped_segments: u64,
+    pub number_of_skipped_segments: u64,
 
     /// The list of [`crate::DateRange`] IDs that have been removed
     /// from the Playlist recently.
-    recently_removed_dataranges: Vec<String>,
+    pub recently_removed_dataranges: Vec<String>,
 }
 
 /// A segment of the larger media file.
 #[derive(Debug, Clone, PartialEq)]
 pub struct MediaSegment {
     /// The URI Identifying the media resource.
-    uri: String,
+    pub uri: String,
 
     /// The duration of this `MediaSegment`.
-    duration_seconds: FloatOrInteger,
+    pub duration_seconds: crate::FloatOrInteger,
 
     /// An optional human-readable informative title of the Media Segment.
-    title: Option<String>,
+    pub title: Option<String>,
 
     /// This may contain either a byte range or bitrate, but not both, because they are
     /// mutually exclusive
-    byte_range_or_bitrate: Option<ByteRangeOrBitrate>,
+    pub byte_range_or_bitrate: Option<ByteRangeOrBitrate>,
 
     /// True if `MediaSegment` is a discontinuity between the Media Segment
     /// that follows it and the one that preceded it.
-    is_discontinuity: bool,
+    pub is_discontinuity: bool,
 
     /// If Some, represents the encryption method used for this `MediaSegment`.
     /// If None, no encryption is used.
-    encryption: Option<crate::EncryptionMethod>,
+    pub encryption: Option<crate::EncryptionMethod>,
 
     /// If Some, this `MediaSegment` requires a Media Initialization Section
     /// and the value describes how to acquire it.
-    media_initialization_section: Option<MediaInitializationSection>,
+    pub media_initialization_section: Option<MediaInitializationSection>,
 
     /// If Some, the first sample of the `MediaSegment` is associated with this
     /// time.
-    absolute_time: Option<SystemTime>,
+    pub absolute_time: Option<SystemTime>,
 
     /// If true, this `MediaSegment` does not contain media data
     /// and should not be loaded by clients.
-    is_gap: bool,
+    pub is_gap: bool,
 
     /// The partial segments for this `MediaSegment`.
-    parts: Vec<PartialSegment>,
-}
-
-#[derive(Debug, Clone, PartialEq)]
-pub enum FloatOrInteger {
-    Float(f64),
-    Integer(u64),
+    pub parts: Vec<PartialSegment>,
 }
 
 /// A common sequence of bytes to initialize the parser before
 /// `MediaSegments` can be parsed.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct MediaInitializationSection {
-    uri: String,
-    range: Option<crate::ByteRangeWithOffset>,
+    pub uri: String,
+    pub range: Option<crate::ByteRangeWithOffset>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -373,7 +370,8 @@ pub enum ByteRangeOrBitrate {
     /// identified by its URI.
     ByteRange(crate::ByteRange),
 
-    /// The approximate segment bit rate of this `MediaSegment`.
+    /// The approximate segment bit rate of this `MediaSegment`
+    /// in kbps.
     Bitrate(u64),
 }
 
@@ -381,19 +379,19 @@ pub enum ByteRangeOrBitrate {
 #[derive(Debug, Clone, PartialEq)]
 pub struct PartialSegment {
     /// The URI for this `PartialSegment`.
-    uri: String,
+    pub uri: String,
 
     /// The duration of this `PartialSegment`.
-    duration_in_seconds: f64,
+    pub duration_in_seconds: f64,
 
     /// True if this `PartialSegment` contains an independent frame.
-    is_independent: bool,
+    pub is_independent: bool,
 
-    /// True if this `PartialSegment` is a sub-range of the resource specified by the URI.
-    byte_range: Option<crate::ByteRange>,
+    /// Some if this `PartialSegment` is a sub-range of the resource specified by the URI.
+    pub byte_range: Option<crate::ByteRange>,
 
     /// True if this `PartialSegment` is not available.
-    is_gap: bool,
+    pub is_gap: bool,
 }
 
 /// A preferred point at which to start playing a Playlist.
@@ -410,4 +408,203 @@ pub struct StartOffset {
     /// [`StartOffset::offset_in_seconds`].  If `false`, clients should attempt to render
     /// every media sample in that segment.
     pub is_precise: bool,
+}
+
+impl MediaPlaylist {
+    /// Serializes the `MediaPlaylist` as a extended M3U playlist into `output`.
+    /// Guaranteed to write valid UTF-8 only.
+    ///
+    /// This method makes lots of small calls to write on `output`. If the implementation
+    /// of write on `output` makes a syscall, like with a `TcpStream`, you should wrap it
+    /// in a [`std::io::BufWriter`].
+    ///
+    /// # Errors
+    ///
+    /// May return `Err` when encountering an io error on `output`.
+    pub fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        Tag::M3u.serialize(&mut output)?;
+        todo!();
+    }
+}
+
+#[cfg(test)]
+mod tests {
+    use crate::{EncryptionMethod, FloatOrInteger, PreloadHint};
+
+    use super::*;
+
+    #[test]
+    fn serialize_media_playlist() {
+        let mut output = Vec::new();
+
+        let playlist = MediaPlaylist {
+            segments: vec![
+                MediaSegment {
+                    uri: "https://example.com/1.mp4".into(),
+                    duration_seconds: FloatOrInteger::Float(5.045),
+                    title: Some("This is the first thingy!".into()),
+                    byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(8000)),
+                    is_discontinuity: false,
+                    encryption: Some(EncryptionMethod::Aes128 {
+                        uri: "https://example.com/key.key".into(),
+                        iv: Some(0x0F91_DC05),
+                        key_format: crate::KeyFormat::Identity,
+                        key_format_versions: vec![1, 7, 6],
+                    }),
+                    media_initialization_section: Some(MediaInitializationSection {
+                        uri: "https://example.com/1.mp4".into(),
+                        range: Some(crate::ByteRangeWithOffset {
+                            length_bytes: 400,
+                            start_offset_bytes: 0,
+                        }),
+                    }),
+                    absolute_time: Some(SystemTime::now()),
+                    is_gap: false,
+                    parts: vec![
+                        PartialSegment {
+                            uri: "https://example.com/1.mp4".into(),
+                            duration_in_seconds: 5.045 / 2.0,
+                            is_independent: true,
+                            byte_range: Some(crate::ByteRange {
+                                length_bytes: 400,
+                                start_offset_bytes: None,
+                            }),
+                            is_gap: false,
+                        },
+                        PartialSegment {
+                            uri: "https://example.com/1.mp4".into(),
+                            duration_in_seconds: 5.045 / 2.0,
+                            is_independent: false,
+                            byte_range: Some(crate::ByteRange {
+                                length_bytes: 400,
+                                start_offset_bytes: Some(400),
+                            }),
+                            is_gap: false,
+                        },
+                    ],
+                },
+                MediaSegment {
+                    uri: "https://example.com/2.mp4".into(),
+                    duration_seconds: FloatOrInteger::Float(5.045),
+                    title: Some("This is the second thingy!".into()),
+                    byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(8000)),
+                    is_discontinuity: false,
+                    encryption: Some(EncryptionMethod::Aes128 {
+                        uri: "https://example.com/key.key".into(),
+                        iv: Some(0x0F91_DC05),
+                        key_format: crate::KeyFormat::Identity,
+                        key_format_versions: vec![1, 7, 6],
+                    }),
+                    media_initialization_section: Some(MediaInitializationSection {
+                        uri: "https://example.com/1.mp4".into(),
+                        range: Some(crate::ByteRangeWithOffset {
+                            length_bytes: 400,
+                            start_offset_bytes: 0,
+                        }),
+                    }),
+                    absolute_time: None,
+                    is_gap: false,
+                    parts: vec![
+                        PartialSegment {
+                            uri: "https://example.com/2.mp4".into(),
+                            duration_in_seconds: 5.045 / 2.0,
+                            is_independent: true,
+                            byte_range: Some(crate::ByteRange {
+                                length_bytes: 400,
+                                start_offset_bytes: None,
+                            }),
+                            is_gap: false,
+                        },
+                        PartialSegment {
+                            uri: "https://example.com/2.mp4".into(),
+                            duration_in_seconds: 5.045 / 2.0,
+                            is_independent: false,
+                            byte_range: Some(crate::ByteRange {
+                                length_bytes: 400,
+                                start_offset_bytes: Some(400),
+                            }),
+                            is_gap: false,
+                        },
+                    ],
+                },
+                MediaSegment {
+                    uri: "https://example.com/3.mp4".into(),
+                    duration_seconds: FloatOrInteger::Float(5.045),
+                    title: Some("This is the third thingy!".into()),
+                    byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(5000)),
+                    is_discontinuity: false,
+                    encryption: None,
+                    media_initialization_section: None,
+                    absolute_time: None,
+                    is_gap: false,
+                    parts: vec![
+                        PartialSegment {
+                            uri: "https://example.com/3.mp4".into(),
+                            duration_in_seconds: 5.045 / 2.0,
+                            is_independent: true,
+                            byte_range: Some(crate::ByteRange {
+                                length_bytes: 400,
+                                start_offset_bytes: None,
+                            }),
+                            is_gap: false,
+                        },
+                        PartialSegment {
+                            uri: "https://example.com/3.mp4".into(),
+                            duration_in_seconds: 5.045 / 2.0,
+                            is_independent: false,
+                            byte_range: Some(crate::ByteRange {
+                                length_bytes: 400,
+                                start_offset_bytes: Some(400),
+                            }),
+                            is_gap: false,
+                        },
+                    ],
+                },
+            ],
+            start_offset: Some(StartOffset {
+                offset_in_seconds: 2.0,
+                is_precise: false,
+            }),
+            variables: vec![("cool".into(), "foo".into())],
+            is_independent_segments: false,
+            target_duration: 5,
+            first_media_sequence_number: 0,
+            finished: false,
+            playlist_type: Some(crate::PlaylistType::Event),
+            hold_back_seconds: None,
+            part_information: Some(PartInformation {
+                part_hold_back_seconds: 3.0 * 3.0,
+                part_target_duration: 3,
+            }),
+            iframes_only: false,
+            playlist_delta_updates_information: Some(crate::DeltaUpdateInfo {
+                skip_boundary_seconds: 3.0 * 6.0,
+                can_skip_dateranges: true,
+            }),
+            supports_blocking_playlist_reloads: true,
+            metadata: MediaMetadata {
+                date_ranges: vec![],
+                skip: None,
+                preload_hints: vec![PreloadHint {
+                    hint_type: crate::PreloadHintType::Part,
+                    uri: "https://example.com/4.mp4".into(),
+                    start_byte_offset: 0,
+                    length_in_bytes: Some(400),
+                }],
+                rendition_reports: vec![crate::RenditionReport {
+                    uri: Some("https://example.com/different.m3u8".into()),
+                    last_sequence_number: None,
+                    last_part_index: None,
+                }],
+            },
+        };
+
+        playlist.serialize(&mut output).unwrap();
+
+        assert_eq!(
+            String::from_utf8(output).unwrap(),
+            "#EXTM3U
+#EXT-X-VERSION:todo"
+        );
+    }
 }

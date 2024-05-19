@@ -28,30 +28,30 @@ use serde::Serialize;
 pub struct SteeringManifest {
     /// Specifies how many seconds the client must wait before
     /// reloading the Steering Manifest.
-    ttl_seconds: u64,
+    pub ttl_seconds: u64,
 
     /// Specifies the URI the client must use the
     /// next time it obtains the Steering Manifest.
-    reload_uri: Option<String>,
+    pub reload_uri: Option<String>,
 
     /// A list of pathway IDs order to most preferred to least preferred.
-    pathway_priority: HashSet<String>,
+    pub pathway_priority: HashSet<String>,
 
     /// A list of novel pathways made by cloning existing ones.
-    pathway_clones: Vec<PathwayClone>,
+    pub pathway_clones: Vec<PathwayClone>,
 }
 
 /// A way to introduce novel Pathways by cloning existing ones.
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct PathwayClone {
     /// The ID of the base pathway, which this clone is based on.
-    base_id: String,
+    pub base_id: String,
 
     /// The ID of this new pathway.
-    id: String,
+    pub id: String,
 
     /// URI Replacement rules.
-    uri_replacement: UriReplacement,
+    pub uri_replacement: UriReplacement,
 }
 
 /// URI replacement rules.
@@ -59,26 +59,27 @@ pub struct PathwayClone {
 pub struct UriReplacement {
     /// If Some, replace the hostname of every rendition URI
     /// in the new pathway.
-    host: Option<String>,
+    pub host: Option<String>,
 
     /// URI params to append to every rendition URI in the new
     /// pathway.
-    query_parameters: Option<HashMap<String, String>>,
+    pub query_parameters: Option<HashMap<String, String>>,
 
     /// If the `stable_variant_id` of a `VariantStream` on the new
     /// pathway appears in the map, set its URI to be the entry's value.
-    per_variant_uris: Option<HashMap<String, String>>,
+    pub per_variant_uris: Option<HashMap<String, String>>,
 
     /// Key value pairs. If the `stable_rendition_id` of a rendition referred to by a
     /// `VariantStream` on the new pathway appears in the map, set
     /// its URI to be the entry's value.
-    per_rendition_uris: Option<HashMap<String, String>>,
+    pub per_rendition_uris: Option<HashMap<String, String>>,
 }
 
-// TODO: Check invariants
 impl SteeringManifest {
     /// Serializes the manifest into it's json representation.
     /// Guaranteed to write valid UTF-8 only.
+    ///
+    /// This does not percent encode [`UriReplacement::query_parameters`].
     ///
     /// # Errors
     ///
@@ -92,20 +93,12 @@ impl SteeringManifest {
     ///
     /// * [`SteeringManifest::pathway_priority`] must be non-empty.
     ///
-    /// * [`SteeringManifest::pathway_priority`] must only contain items that contain
-    /// characters from the set [a..z], [A..Z], [0..9], '.', '-', and '_', aka
-    /// none of the items contain characters not contained in
-    /// [`SteeringManifest::PATHWAY_ID_ALLOWED_CHARACTERS`].
-    ///
     /// * [`UriReplacement::host`], if `Some`, must be non-empty.
     ///
     /// * [`UriReplacement::query_parameters`] must not contain a key which is empty.
     pub fn serialize(&self, output: impl io::Write) -> Result<(), serde_json::Error> {
         serde_json::to_writer(output, self)
     }
-
-    pub const PATHWAY_ID_ALLOWED_CHARACTERS: &'static str =
-        "abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789.-_";
 }
 
 impl Serialize for SteeringManifest {
@@ -132,14 +125,6 @@ impl Serialize for SteeringManifest {
             !self.pathway_priority.is_empty(),
             "Found an empty pathway priority list while serializing."
         );
-        for id in &self.pathway_priority {
-            if !id
-                .chars()
-                .all(|x| Self::PATHWAY_ID_ALLOWED_CHARACTERS.contains(x))
-            {
-                panic!("Found a pathway ID that contains disallowed characters while serializing.")
-            }
-        }
         manifest.serialize_field("PATHWAY-PRIORITY", &self.pathway_priority)?;
 
         if self.pathway_clones.is_empty() {

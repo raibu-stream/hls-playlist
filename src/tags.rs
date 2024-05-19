@@ -14,16 +14,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+mod serialize;
+
 use std::time::SystemTime;
 
 /// A representation of all possible tags.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tag {
-    MediaPlaylistTag(MediaPlaylistTag),
-    MediaSegmentTag(MediaSegmentTag),
-    MediaMetadataTag(MediaMetadataTag),
-    MultivariantPlaylistTag(MultivariantPlaylistTag),
-
     /// The EXT-X-VERSION tag indicates the compatibility version of the
     /// Playlist file, its associated media, and its server.
     XVersion {
@@ -35,7 +32,7 @@ pub enum Tag {
 
     /// The EXT-X-DEFINE tag provides a Playlist variable definition or
     /// declaration.
-    XDefine(DefinitionType),
+    XDefine(crate::DefinitionType),
 
     /// The EXT-X-START tag indicates a preferred point at which to start
     /// playing a Playlist.
@@ -48,30 +45,11 @@ pub enum Tag {
     /// in a Media Segment can be decoded without information from other
     /// segments.
     XIndependentSegments,
-}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum DefinitionType {
-    /// The variable is defined here.
-    Inline { name: String, value: String },
-
-    /// Use a variable defined in the Multivariant Playlist that referenced
-    /// this playlist.
-    Import { name: String },
-
-    /// Use the value of the query parameter named `name` from the current
-    /// playlist's URI. If the URI is redirected, look for the query
-    /// parameter in the 30x response URI.
-    QueryParameter { name: String },
-}
-
-/// A tag applying to a `MediaSegment`
-#[derive(Debug, Clone, PartialEq)]
-pub enum MediaSegmentTag {
     /// The EXTINF tag specifies the duration of a Media Segment.
     Inf {
-        duration_seconds: f64,
-        title: Option<String>,
+        duration_seconds: crate::FloatOrInteger,
+        title: String,
     },
 
     /// The EXT-X-BYTERANGE tag indicates that a Media Segment is a sub-range
@@ -113,25 +91,24 @@ pub enum MediaSegmentTag {
         byte_range: Option<crate::ByteRange>,
         is_gap: bool,
     },
-}
-
-/// Media Playlist tags describe global parameters of the Media Playlist.
-/// There MUST NOT be more than one Media Playlist tag of each type in
-/// any Media Playlist.
-#[derive(Debug, Clone, PartialEq)]
-pub enum MediaPlaylistTag {
     /// The EXT-X-TARGETDURATION tag specifies the maximum Media Segment
     /// duration.
-    XTargetDuration { target_duration_seconds: u64 },
+    XTargetDuration {
+        target_duration_seconds: u64,
+    },
 
     /// The EXT-X-MEDIA-SEQUENCE tag indicates the Media Sequence Number of
     /// the first Media Segment that appears in a Playlist file.
-    XMediaSequence { sequence_number: u64 },
+    XMediaSequence {
+        sequence_number: u64,
+    },
 
     /// The EXT-X-DISCONTINUITY-SEQUENCE tag allows synchronization between
     /// different Renditions of the same Variant Stream or different Variant
     /// Streams that have EXT-X-DISCONTINUITY tags in their Media Playlists.
-    XDiscontinuitySequence { sequence_number: u64 },
+    XDiscontinuitySequence {
+        sequence_number: u64,
+    },
 
     /// The EXT-X-ENDLIST tag indicates that no more Media Segments will be
     /// added to the Media Playlist file.
@@ -147,7 +124,9 @@ pub enum MediaPlaylistTag {
 
     /// The EXT-X-PART-INF tag provides information about the Partial
     /// Segments in the Playlist.
-    XPartInf { part_target_duration_seconds: f64 },
+    XPartInf {
+        part_target_duration_seconds: f64,
+    },
 
     /// The EXT-X-SERVER-CONTROL tag allows the Server to indicate support
     /// for Delivery Directives.
@@ -157,12 +136,7 @@ pub enum MediaPlaylistTag {
         part_hold_back: Option<f64>,
         can_block_reload: bool,
     },
-}
 
-/// Multivariant Playlist tags define the variant streams, renditions, and
-/// other global parameters of the presentation.
-#[derive(Debug, Clone, PartialEq)]
-pub enum MultivariantPlaylistTag {
     /// The EXT-X-MEDIA tag is used to relate Media Playlists that contain
     /// alternative Renditions of the same content.
     XMedia {
@@ -173,7 +147,7 @@ pub enum MultivariantPlaylistTag {
         name: String,
         stable_rendition_id: Option<String>,
         playback_priority: crate::RenditionPlaybackPriority,
-        characteristics: Option<Vec<String>>,
+        characteristics: Vec<String>,
     },
 
     /// The EXT-X-STREAM-INF tag specifies a Variant Stream, which is a set
@@ -207,31 +181,7 @@ pub enum MultivariantPlaylistTag {
     /// The EXT-X-CONTENT-STEERING tag allows a server to provide a Content
     /// Steering (Section 7) Manifest.
     XContentSteering(crate::ContentSteering),
-}
 
-#[derive(Debug, Clone, PartialEq, Eq)]
-pub enum MediaType {
-    Audio {
-        uri: Option<String>,
-        channels: Option<crate::AudioChannelInformation>,
-        bit_depth: Option<u64>,
-        sample_rate: Option<u64>,
-    },
-    Video {
-        uri: Option<String>,
-    },
-    Subtitles {
-        uri: String,
-        forced: bool,
-    },
-    ClosedCaptions {
-        in_stream_id: crate::InStreamId,
-    },
-}
-
-/// A tag describing metadata about a given `MediaPlaylist`.
-#[derive(Debug, Clone, PartialEq)]
-pub enum MediaMetadataTag {
     /// The EXT-X-DATERANGE tag associates a Date Range (i.e., a range of
     /// time defined by a starting and ending date) with a set of attribute/
     /// value pairs.
@@ -255,8 +205,22 @@ pub enum MediaMetadataTag {
     XRenditionReport(crate::RenditionReport),
 }
 
-// impl Tag {
-//     pub fn serialize(&self, output: impl Write) {
-//         todo!()
-//     }
-// }
+#[derive(Debug, Clone, PartialEq, Eq)]
+pub enum MediaType {
+    Audio {
+        uri: Option<String>,
+        channels: Option<crate::AudioChannelInformation>,
+        bit_depth: Option<u64>,
+        sample_rate: Option<u64>,
+    },
+    Video {
+        uri: Option<String>,
+    },
+    Subtitles {
+        uri: String,
+        forced: bool,
+    },
+    ClosedCaptions {
+        in_stream_id: crate::InStreamId,
+    },
+}

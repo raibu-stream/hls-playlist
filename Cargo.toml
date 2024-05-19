@@ -10,9 +10,12 @@ keywords = ["hls", "parse", "m3u", "extm3u"]
 categories = ["parser-implementations"]
 
 [dependencies]
+chrono = "0.4.38"
 serde = { version = "1.0.201", optional = true }
 serde_json = { version = "1.0.117", optional = true }
 
+[dev-dependencies]
+rstest = "0.19.0"
+
 [features]
-default = ["steering-manifest"]
 steering-manifest = ["dep:serde", "dep:serde_json"]

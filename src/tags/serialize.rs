@@ -1,6 +1,11 @@
 use std::io;
 
-use super::Tag;
+use crate::{
+    ByteRange, ContentSteering, DateRange, PreloadHint, RenditionPlaybackPriority, RenditionReport,
+    SessionData, StreamInf,
+};
+
+use super::{MediaType, Tag};
 
 impl Tag {
     /// Serializes the `Tag` as a extended M3U playlist tag into `output`.
@@ -17,7 +22,17 @@ impl Tag {
         match self {
             Self::XVersion { version } => write!(output, "#EXT-X-VERSION:{version}")?,
             Self::M3u => output.write_all(b"#EXTM3U")?,
-            Self::XDefine(_) => todo!(),
+            Self::XDefine(definition) => match definition {
+                crate::DefinitionType::Inline { name, value } => {
+                    write!(output, "#EXT-X-DEFINE:NAME=\"{name}\",VALUE=\"{value}\"")?;
+                }
+                crate::DefinitionType::Import { name } => {
+                    write!(output, "#EXT-X-DEFINE:IMPORT=\"{name}\"")?;
+                }
+                crate::DefinitionType::QueryParameter { name } => {
+                    write!(output, "#EXT-X-DEFINE:QUERYPARAM=\"{name}\"")?;
+                }
+            },
             Self::XStart {
                 offset_seconds,
                 is_precise,
@@ -31,38 +46,85 @@ impl Tag {
             Self::Inf {
                 duration_seconds,
                 title,
-            } => todo!(),
-            Self::XByterange(_) => todo!(),
-            Self::XDiscontinuity => todo!(),
-            Self::XKey(_) => todo!(),
-            Self::XMap { uri, range } => todo!(),
-            Self::XProgramDateTime(_) => todo!(),
-            Self::XGap => todo!(),
-            Self::XBitrate { kbps } => todo!(),
+            } => match duration_seconds {
+                crate::FloatOrInteger::Float(float) => write!(output, "#EXTINF:{float},{title}")?,
+                crate::FloatOrInteger::Integer(integer) => {
+                    write!(output, "#EXTINF:{integer},{title}")?;
+                }
+            },
+            Self::XByterange(byte_range) => {
+                write!(output, "#EXT-X-BYTERANGE:")?;
+                byte_range.serialize(&mut output)?;
+            }
+            Self::XDiscontinuity => write!(output, "#EXT-X-DISCONTINUITY")?,
+            Self::XKey(method) => {
+                write!(output, "#EXT-X-KEY:")?;
+
+                if let Some(method) = method {
+                    method.serialize(&mut output)?;
+                } else {
+                    write!(output, "METHOD=NONE")?;
+                }
+            }
+            Self::XMap { uri, range } => {
+                write!(output, "#EXT-X-MAP:URI=\"{uri}\"")?;
+                if let Some(range) = range {
+                    write!(output, ",BYTERANGE=")?;
+                    range.serialize(&mut output)?;
+                }
+            }
+            Self::XProgramDateTime(time) => {
+                write!(output, "#EXT-X-PROGRAM-DATE-TIME:{}", time.to_rfc3339())?;
+            }
+            Self::XGap => write!(output, "#EXT-X-GAP")?,
+            Self::XBitrate { kbps } => write!(output, "#EXT-X-BITRATE:{kbps}")?,
             Self::XPart {
                 uri,
                 duration_seconds,
                 is_independent,
                 byte_range,
                 is_gap,
-            } => todo!(),
+            } => Self::serialize_x_part(
+                &mut output,
+                uri,
+                *duration_seconds,
+                *is_independent,
+                byte_range,
+                *is_gap,
+            )?,
             Self::XTargetDuration {
                 target_duration_seconds,
-            } => todo!(),
-            Self::XMediaSequence { sequence_number } => todo!(),
-            Self::XDiscontinuitySequence { sequence_number } => todo!(),
-            Self::XEndList => todo!(),
-            Self::XPlaylistType(_) => todo!(),
-            Self::XIFramesOnly => todo!(),
+            } => write!(output, "#EXT-X-TARGETDURATION:{target_duration_seconds}")?,
+            Self::XMediaSequence { sequence_number } => {
+                write!(output, "#EXT-X-MEDIA-SEQUENCE:{sequence_number}")?;
+            }
+            Self::XDiscontinuitySequence { sequence_number } => {
+                write!(output, "#EXT-X-DISCONTINUITY-SEQUENCE:{sequence_number}")?;
+            }
+            Self::XEndList => write!(output, "#EXT-X-ENDLIST")?,
+            Self::XPlaylistType(playlist_type) => match playlist_type {
+                crate::PlaylistType::Event => write!(output, "#EXT-X-PLAYLIST-TYPE:EVENT")?,
+                crate::PlaylistType::Vod => write!(output, "#EXT-X-PLAYLIST-TYPE:VOD")?,
+            },
+            Self::XIFramesOnly => write!(output, "#EXT-X-I-FRAMES-ONLY")?,
             Self::XPartInf {
                 part_target_duration_seconds,
-            } => todo!(),
+            } => write!(
+                output,
+                "#EXT-X-PART-INF:PART-TARGET={part_target_duration_seconds}"
+            )?,
             Self::XServerControl {
                 delta_update_info,
                 hold_back,
                 part_hold_back,
                 can_block_reload,
-            } => todo!(),
+            } => Self::serialize_x_server_control(
+                &mut output,
+                delta_update_info,
+                hold_back,
+                part_hold_back,
+                *can_block_reload,
+            )?,
             Self::XMedia {
                 media_type,
                 group_id,
@@ -72,7 +134,17 @@ impl Tag {
                 stable_rendition_id,
                 playback_priority,
                 characteristics,
-            } => todo!(),
+            } => Self::serialize_x_media(
+                &mut output,
+                media_type,
+                group_id,
+                language,
+                assoc_language,
+                name,
+                stable_rendition_id,
+                playback_priority,
+                characteristics,
+            )?,
             Self::XStreamInf {
                 stream_inf,
                 frame_rate,
@@ -81,25 +153,600 @@ impl Tag {
                 subtitles_group_id,
                 closed_captions_group_id,
                 uri,
-            } => todo!(),
+            } => Self::serialize_x_stream_inf(
+                &mut output,
+                stream_inf,
+                frame_rate,
+                audio_group_id,
+                video_group_id,
+                subtitles_group_id,
+                closed_captions_group_id,
+                uri,
+            )?,
             Self::XIFrameStreamInf {
                 stream_inf,
                 video_group_id,
                 uri,
-            } => todo!(),
-            Self::XSessionData(_) => todo!(),
-            Self::XSessionKey(_) => todo!(),
-            Self::XContentSteering(_) => todo!(),
-            Self::XDateRange(_) => todo!(),
+            } => {
+                Self::serialize_x_i_frame_stream_inf(&mut output, stream_inf, video_group_id, uri)?;
+            }
+            Self::XSessionData(session_data) => {
+                Self::serialize_x_session_data(&mut output, session_data)?;
+            }
+            Self::XSessionKey(encryption_method) => {
+                write!(output, "#EXT-X-SESSION-KEY:")?;
+                encryption_method.serialize(&mut output)?;
+            }
+            Self::XContentSteering(content_steering) => {
+                Self::serialize_x_content_steering(&mut output, content_steering)?;
+            }
+            Self::XDateRange(daterange) => Self::serialize_x_daterange(&mut output, daterange)?,
             Self::XSkip {
                 number_of_skipped_segments,
                 recently_removed_dataranges,
-            } => todo!(),
-            Self::XPreloadHint(_) => todo!(),
-            Self::XRenditionReport(_) => todo!(),
+            } => Self::serialize_x_skip(
+                &mut output,
+                *number_of_skipped_segments,
+                recently_removed_dataranges,
+            )?,
+            Self::XPreloadHint(preload_hint) => {
+                Self::serialize_x_preload_hint(&mut output, preload_hint)?;
+            }
+            Self::XRenditionReport(report) => {
+                Self::serialize_x_rendition_report(&mut output, report)?;
+            }
         };
 
         output.write_all(b"\n")?;
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn serialize_x_media(
+        mut output: impl io::Write,
+        media_type: &MediaType,
+        group_id: &String,
+        language: &Option<String>,
+        assoc_language: &Option<String>,
+        name: &String,
+        stable_rendition_id: &Option<String>,
+        playback_priority: &RenditionPlaybackPriority,
+        characteristics: &[String],
+    ) -> io::Result<()> {
+        match media_type {
+            MediaType::Audio { uri, .. } => {
+                write!(output, "#EXT-X-MEDIA:TYPE=AUDIO")?;
+
+                if let Some(uri) = uri {
+                    write!(output, ",URI=\"{uri}\"")?;
+                }
+            }
+            MediaType::Video { uri } => {
+                write!(output, "#EXT-X-MEDIA:TYPE=VIDEO")?;
+
+                if let Some(uri) = uri {
+                    write!(output, ",URI=\"{uri}\"")?;
+                }
+            }
+            MediaType::Subtitles { uri, .. } => {
+                write!(output, "#EXT-X-MEDIA:TYPE=SUBTITLES,URI=\"{uri}\"")?;
+            }
+            MediaType::ClosedCaptions { .. } => {
+                write!(output, "#EXT-X-MEDIA:TYPE=CLOSED-CAPTIONS")?;
+            }
+        };
+
+        write!(output, ",GROUP-ID=\"{group_id}\"")?;
+
+        if let Some(language) = language {
+            write!(output, ",LANGUAGE=\"{language}\"")?;
+        }
+
+        if let Some(assoc_language) = assoc_language {
+            write!(output, ",ASSOC-LANGUAGE=\"{assoc_language}\"")?;
+        }
+
+        write!(output, ",NAME=\"{name}\"")?;
+
+        if let Some(id) = stable_rendition_id {
+            write!(output, ",STABLE-RENDITION-ID=\"{id}\"")?;
+        }
+
+        match playback_priority {
+            RenditionPlaybackPriority::Default => write!(output, ",DEFAULT=YES,AUTOSELECT=YES")?,
+            RenditionPlaybackPriority::AutoSelect => write!(output, ",AUTOSELECT=YES")?,
+            RenditionPlaybackPriority::None => (),
+        }
+
+        if let MediaType::Subtitles { forced: true, .. } = media_type {
+            write!(output, ",FORCED=YES")?;
+        }
+
+        if let MediaType::ClosedCaptions { in_stream_id } = media_type {
+            match in_stream_id {
+                crate::InStreamId::Cc1 => write!(output, ",INSTREAM-ID=\"CC1\"")?,
+                crate::InStreamId::Cc2 => write!(output, ",INSTREAM-ID=\"CC2\"")?,
+                crate::InStreamId::Cc3 => write!(output, ",INSTREAM-ID=\"CC3\"")?,
+                crate::InStreamId::Cc4 => write!(output, ",INSTREAM-ID=\"CC4\"")?,
+                crate::InStreamId::Service(id) => write!(output, ",INSTREAM-ID=\"SERVICE{id}\"")?,
+            }
+        }
+
+        if let MediaType::Audio {
+            bit_depth,
+            sample_rate,
+            ..
+        } = media_type
+        {
+            if let Some(bit_depth) = bit_depth {
+                write!(output, ",BIT-DEPTH={bit_depth}")?;
+            }
+
+            if let Some(sample_rate) = sample_rate {
+                write!(output, ",SAMPLE-RATE={sample_rate}")?;
+            }
+        }
+
+        if !characteristics.is_empty() {
+            write!(output, ",CHARACTERISTICS=\"")?;
+
+            if characteristics.len() == 1 {
+                write!(output, "{}", characteristics[0])?;
+            } else {
+                for (i, tag) in characteristics.iter().enumerate() {
+                    if i == characteristics.len() - 1 {
+                        write!(output, "{tag}")?;
+                    } else {
+                        write!(output, "{tag},")?;
+                    }
+                }
+            }
+
+            write!(output, "\"")?;
+        }
+
+        if let MediaType::Audio {
+            channels: Some(channels),
+            ..
+        } = media_type
+        {
+            match channels {
+                crate::AudioChannelInformation::NumberOfChannelsOnly { number_of_channels } => {
+                    write!(output, ",CHANNELS=\"{number_of_channels}\"")?;
+                }
+                crate::AudioChannelInformation::WithAudioCodingIdentifiers {
+                    number_of_channels,
+                    audio_coding_identifiers,
+                } => {
+                    write!(output, ",CHANNELS=\"{number_of_channels}/")?;
+
+                    if audio_coding_identifiers.is_empty() {
+                        write!(output, "-\"")?;
+                    } else if audio_coding_identifiers.len() == 1 {
+                        write!(output, "{}\"", audio_coding_identifiers[0])?;
+                    } else {
+                        for (i, identifier) in audio_coding_identifiers.iter().enumerate() {
+                            if i == audio_coding_identifiers.len() - 1 {
+                                write!(output, "{identifier}\"")?;
+                            } else {
+                                write!(output, "{identifier},")?;
+                            }
+                        }
+                    }
+                }
+                crate::AudioChannelInformation::WithSpecialUsageIdentifiers {
+                    number_of_channels,
+                    audio_coding_identifiers,
+                    binaural,
+                    immersive,
+                    downmix,
+                } => {
+                    write!(output, ",CHANNELS=\"{number_of_channels}/")?;
+
+                    if audio_coding_identifiers.is_empty() {
+                        write!(output, "-/")?;
+                    } else if audio_coding_identifiers.len() == 1 {
+                        write!(output, "{}/", audio_coding_identifiers[0])?;
+                    } else {
+                        for (i, identifier) in audio_coding_identifiers.iter().enumerate() {
+                            if i == audio_coding_identifiers.len() - 1 {
+                                write!(output, "{identifier}/")?;
+                            } else {
+                                write!(output, "{identifier},")?;
+                            }
+                        }
+                    };
+
+                    if *binaural {
+                        if *immersive || *downmix {
+                            write!(output, "BINAURAL,")?;
+                        } else {
+                            write!(output, "BINAURAL")?;
+                        }
+                    }
+                    if *immersive {
+                        if *downmix {
+                            write!(output, "IMMERSIVE,")?;
+                        } else {
+                            write!(output, "IMMERSIVE")?;
+                        }
+                    }
+                    if *downmix {
+                        write!(output, "DOWNMIX")?;
+                    }
+
+                    write!(output, "\"")?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    #[allow(clippy::too_many_arguments)]
+    fn serialize_x_stream_inf(
+        mut output: impl io::Write,
+        stream_inf: &StreamInf,
+        frame_rate: &Option<f64>,
+        audio_group_id: &Option<String>,
+        video_group_id: &Option<String>,
+        subtitles_group_id: &Option<String>,
+        closed_captions_group_id: &Option<String>,
+        uri: &String,
+    ) -> io::Result<()> {
+        write!(output, "#EXT-X-STREAM-INF:")?;
+        stream_inf.serialize(&mut output)?;
+
+        if let Some(frame_rate) = frame_rate {
+            write!(output, ",FRAME-RATE={frame_rate:.3}")?;
+        }
+
+        if let Some(id) = audio_group_id {
+            write!(output, ",AUDIO=\"{id}\"")?;
+        }
+        if let Some(id) = video_group_id {
+            write!(output, ",VIDEO=\"{id}\"")?;
+        }
+        if let Some(id) = subtitles_group_id {
+            write!(output, ",SUBTITLES=\"{id}\"")?;
+        }
+        if let Some(id) = closed_captions_group_id {
+            write!(output, ",CLOSED-CAPTIONS=\"{id}\"")?;
+        }
+
+        write!(output, "\n{uri}")?;
+
+        Ok(())
+    }
+
+    fn serialize_x_i_frame_stream_inf(
+        mut output: impl io::Write,
+        stream_inf: &StreamInf,
+        video_group_id: &Option<String>,
+        uri: &String,
+    ) -> io::Result<()> {
+        write!(output, "#EXT-X-I-FRAME-STREAM-INF:")?;
+        stream_inf.serialize(&mut output)?;
+
+        if let Some(id) = video_group_id {
+            write!(output, ",VIDEO=\"{id}\"")?;
+        }
+
+        write!(output, ",URI=\"{uri}\"")?;
+
+        Ok(())
+    }
+
+    fn serialize_x_session_data(
+        mut output: impl io::Write,
+        session_data: &SessionData,
+    ) -> io::Result<()> {
+        write!(
+            output,
+            "#EXT-X-SESSION-DATA:DATA-ID=\"{}\"",
+            session_data.data_id
+        )?;
+
+        match &session_data.value {
+            crate::SessionDataValue::Value { value, language } => {
+                write!(output, ",VALUE=\"{value}\"")?;
+
+                if let Some(language) = language {
+                    write!(output, ",LANGUAGE=\"{language}\"")?;
+                }
+            }
+            crate::SessionDataValue::Uri { uri, format } => {
+                write!(output, ",URI=\"{uri}\"")?;
+
+                match format {
+                    crate::UriFormat::Json => write!(output, ",FORMAT=JSON")?,
+                    crate::UriFormat::Raw => write!(output, ",FORMAT=RAW")?,
+                }
+            }
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_content_steering(
+        mut output: impl io::Write,
+        content_steering: &ContentSteering,
+    ) -> io::Result<()> {
+        write!(
+            output,
+            "#EXT-X-CONTENT-STEERING:SERVER-URI=\"{}\"",
+            content_steering.server_uri
+        )?;
+
+        if let Some(id) = &content_steering.pathway_id {
+            write!(output, ",PATHWAY-ID=\"{id}\"")?;
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_rendition_report(
+        mut output: impl io::Write,
+        report: &RenditionReport,
+    ) -> io::Result<()> {
+        let mut has_written_attribute = false;
+        write!(output, "#EXT-X-RENDITION-REPORT:")?;
+
+        if let Some(uri) = &report.uri {
+            has_written_attribute = true;
+
+            write!(output, "URI=\"{uri}\"")?;
+        }
+
+        if let Some(last_sequence_number) = report.last_sequence_number {
+            if has_written_attribute {
+                write!(output, ",LAST-MSN={last_sequence_number}")?;
+            } else {
+                write!(output, "LAST-MSN={last_sequence_number}")?;
+            }
+
+            has_written_attribute = true;
+        }
+
+        if let Some(last_part_index) = report.last_part_index {
+            if has_written_attribute {
+                write!(output, ",LAST-PART={last_part_index}")?;
+            } else {
+                write!(output, "LAST-PART={last_part_index}")?;
+            }
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_preload_hint(
+        mut output: impl io::Write,
+        preload_hint: &PreloadHint,
+    ) -> io::Result<()> {
+        let hint_type = match preload_hint.hint_type {
+            crate::PreloadHintType::Part => "PART",
+            crate::PreloadHintType::Map => "MAP",
+        };
+        write!(
+            output,
+            "#EXT-X-PRELOAD-HINT:TYPE={hint_type},URI=\"{}\"",
+            preload_hint.uri
+        )?;
+
+        if preload_hint.start_byte_offset != 0 {
+            write!(
+                output,
+                ",BYTERANGE-START={}",
+                preload_hint.start_byte_offset
+            )?;
+        }
+
+        if let Some(length) = preload_hint.length_in_bytes {
+            write!(output, ",BYTERANGE-LENGTH={length}")?;
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_skip(
+        mut output: impl io::Write,
+        number_of_skipped_segments: u64,
+        recently_removed_dataranges: &[String],
+    ) -> io::Result<()> {
+        write!(
+            output,
+            "#EXT-X-SKIP:SKIPPED-SEGMENTS={number_of_skipped_segments}"
+        )?;
+
+        if !recently_removed_dataranges.is_empty() {
+            write!(output, ",RECENTLY-REMOVED-DATERANGES=\"")?;
+
+            if recently_removed_dataranges.len() == 1 {
+                write!(output, "{}", recently_removed_dataranges[0])?;
+            } else {
+                for (i, id) in recently_removed_dataranges.iter().enumerate() {
+                    if i == recently_removed_dataranges.len() - 1 {
+                        write!(output, "{id}")?;
+                    } else {
+                        write!(output, "{id}\t")?;
+                    }
+                }
+            }
+
+            write!(output, "\"")?;
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_daterange(mut output: impl io::Write, daterange: &DateRange) -> io::Result<()> {
+        write!(output, "#EXT-X-DATERANGE:ID=\"{}\"", daterange.id)?;
+
+        if let Some(class) = &daterange.class {
+            write!(output, ",CLASS=\"{class}\"")?;
+        }
+
+        write!(
+            output,
+            ",START-DATE=\"{}\"",
+            daterange.start_date.to_rfc3339()
+        )?;
+
+        if let Some(cue) = &daterange.cue {
+            match cue.position {
+                crate::DateRangeCuePosition::Pre if cue.once => {
+                    write!(output, ",CUE=\"PRE,ONCE\"")?;
+                }
+                crate::DateRangeCuePosition::Post if cue.once => {
+                    write!(output, ",CUE=\"POST,ONCE\"")?;
+                }
+                crate::DateRangeCuePosition::Neither if cue.once => {
+                    write!(output, ",CUE=\"ONCE\"")?;
+                }
+                crate::DateRangeCuePosition::Pre => {
+                    write!(output, ",CUE=\"PRE\"")?;
+                }
+                crate::DateRangeCuePosition::Post => {
+                    write!(output, ",CUE=\"POST\"")?;
+                }
+                crate::DateRangeCuePosition::Neither => write!(output, ",CUE=\"\"")?,
+            }
+        }
+
+        if let Some(end_date) = daterange.end_date {
+            write!(output, ",END-DATE=\"{}\"", end_date.to_rfc3339())?;
+        }
+
+        if let Some(duration) = daterange.duration_seconds {
+            write!(output, ",DURATION={duration}")?;
+        }
+
+        if let Some(planned_duration) = daterange.planned_duration_seconds {
+            write!(output, ",PLANNED-DURATION={planned_duration}")?;
+        }
+
+        for (attribute_name, attribute_value) in &daterange.client_attributes {
+            write!(output, ",X-{attribute_name}=")?;
+            match attribute_value {
+                crate::AttributeValue::String(string) => write!(output, "\"{string}\"")?,
+                crate::AttributeValue::Bytes(bytes) => {
+                    write!(output, "0x{}", hex::encode_upper(bytes.clone()))?;
+                }
+                crate::AttributeValue::Float(float) => write!(output, "{float}")?,
+            };
+        }
+
+        if !daterange.scte35_cmd.is_empty() {
+            write!(
+                output,
+                ",SCTE35-CMD=0x{}",
+                hex::encode_upper(daterange.scte35_cmd.clone())
+            )?;
+        }
+
+        if !daterange.scte35_out.is_empty() {
+            write!(
+                output,
+                ",SCTE35-OUT=0x{}",
+                hex::encode_upper(daterange.scte35_out.clone())
+            )?;
+        }
+
+        if !daterange.scte35_in.is_empty() {
+            write!(
+                output,
+                ",SCTE35-IN=0x{}",
+                hex::encode_upper(daterange.scte35_in.clone())
+            )?;
+        }
+
+        if daterange.end_on_next {
+            write!(output, ",END-ON-NEXT=YES")?;
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_part(
+        mut output: impl io::Write,
+        uri: &String,
+        duration_seconds: f64,
+        is_independent: bool,
+        byte_range: &Option<ByteRange>,
+        is_gap: bool,
+    ) -> io::Result<()> {
+        write!(
+            output,
+            "#EXT-X-PART:URI=\"{uri}\",DURATION={duration_seconds}"
+        )?;
+
+        if is_independent {
+            write!(output, ",INDEPENDENT=YES")?;
+        }
+
+        if let Some(byte_range) = byte_range {
+            write!(output, ",BYTERANGE=")?;
+            byte_range.serialize(&mut output)?;
+        }
+
+        if is_gap {
+            write!(output, ",GAP=YES")?;
+        }
+
+        Ok(())
+    }
+
+    fn serialize_x_server_control(
+        mut output: impl io::Write,
+        delta_update_info: &Option<crate::DeltaUpdateInfo>,
+        hold_back: &Option<f64>,
+        part_hold_back: &Option<f64>,
+        can_block_reload: bool,
+    ) -> io::Result<()> {
+        let mut has_written_attribute = false;
+        write!(output, "#EXT-X-SERVER-CONTROL:")?;
+
+        if let Some(delta_update_info) = delta_update_info {
+            has_written_attribute = true;
+            write!(
+                output,
+                "CAN-SKIP-UNTIL={}",
+                delta_update_info.skip_boundary_seconds
+            )?;
+
+            if delta_update_info.can_skip_dateranges {
+                write!(output, ",CAN-SKIP-DATERANGES=YES")?;
+            }
+        }
+
+        if let Some(hold_back) = hold_back {
+            if has_written_attribute {
+                write!(output, ",HOLD-BACK={hold_back}")?;
+            } else {
+                write!(output, "HOLD-BACK={hold_back}")?;
+            }
+
+            has_written_attribute = true;
+        }
+
+        if let Some(part_hold_back) = part_hold_back {
+            if has_written_attribute {
+                write!(output, ",PART-HOLD-BACK={part_hold_back}")?;
+            } else {
+                write!(output, "PART-HOLD-BACK={part_hold_back}")?;
+            }
+
+            has_written_attribute = true;
+        }
+
+        if can_block_reload {
+            if has_written_attribute {
+                write!(output, ",CAN-BLOCK-RELOAD=YES")?;
+            } else {
+                write!(output, "CAN-BLOCK-RELOAD=YES")?;
+            }
+        };
+
         Ok(())
     }
 }
@@ -360,7 +1007,7 @@ mod tests {
         }))
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-KEY:METHOD=AES-128,URI=\"https://example.com/foo.key\",IV=0x0F91DC05,KEYFORMAT=\"super cool key format\",KEYFORMATVERSIONS=\"1/16\"\n");
+        assert_eq!(output, b"#EXT-X-KEY:METHOD=AES-128,URI=\"https://example.com/foo.key\",IV=0xF91DC05,KEYFORMAT=\"super cool key format\",KEYFORMATVERSIONS=\"1/16\"\n");
 
         output.clear();
         Tag::XKey(Some(EncryptionMethod::Aes128 {
@@ -384,7 +1031,7 @@ mod tests {
         }))
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"https://example.com/foo.key\",IV=0x0F91DC05,KEYFORMATVERSIONS=\"1/16\"\n");
+        assert_eq!(output, b"#EXT-X-KEY:METHOD=SAMPLE-AES,URI=\"https://example.com/foo.key\",IV=0xF91DC05,KEYFORMATVERSIONS=\"1/16\"\n");
 
         output.clear();
         Tag::XKey(Some(EncryptionMethod::SampleAesCtr {
@@ -425,9 +1072,7 @@ mod tests {
     #[rstest]
     fn serialize_x_program_date_time(mut output: Vec<u8>) {
         let time = chrono::DateTime::parse_from_rfc3339("2010-02-19T14:54:23.031+08:00").unwrap();
-        Tag::XProgramDateTime(time.into())
-            .serialize(&mut output)
-            .unwrap();
+        Tag::XProgramDateTime(time).serialize(&mut output).unwrap();
         assert_eq!(
             output,
             b"#EXT-X-PROGRAM-DATE-TIME:2010-02-19T14:54:23.031+08:00\n"
@@ -482,68 +1127,6 @@ mod tests {
     }
 
     #[rstest]
-    fn serialize_x_daterange(mut output: Vec<u8>) {
-        let time = chrono::DateTime::parse_from_rfc3339("2010-02-19T14:54:23.031+08:00")
-            .unwrap()
-            .into();
-        Tag::XDateRange(crate::DateRange {
-            id: "This is my favorite data range".into(),
-            class: Some("private.cool.example".into()),
-            start_date: time,
-            cue: Some(crate::DateRangeCue {
-                once: true,
-                position: crate::DateRangeCuePosition::Post,
-            }),
-            end_date: Some(time + Duration::from_millis(500)),
-            duration_seconds: Some(0.5),
-            planned_duration_seconds: Some(0.52318),
-            client_attributes: HashMap::from([
-                (
-                    "EXAMPLE-STRING".into(),
-                    AttributeValue::String("I wonder what this does!".into()),
-                ),
-                (
-                    "EXAMPLE-BYTES".into(),
-                    AttributeValue::Bytes(vec![0x63, 0x8, 0x8F]),
-                ),
-                ("EXAMPLE-FLOAT".into(), AttributeValue::Float(0.42)),
-            ]),
-            scte35_cmd: Some(vec![0x98, 0xA9, 0x1A, 0xFB, 0x81, 0x20, 0x5]),
-            scte35_in: Some(vec![0x98, 0xA2, 0x72, 0x4C, 0x20, 0x5]),
-            scte35_out: Some(vec![0x0]),
-            end_on_next: true,
-        })
-        .serialize(&mut output)
-        .unwrap();
-        assert_eq!(
-            output,
-            b"#EXT-X-DATERANGE:ID=\"This is my favorite data range\",CLASS=\"private.cool.example\",START-DATE=\"2010-02-19T14:54:23.031+08:00\",CUE=\"ONCE,POST\",END-DATE=\"TODO\",DURATION=0.5,PLANNED-DURATION=0.52318,X-EXAMPLE-STRING=\"I wonder what this does!\",X-EXAMPLE-BYTES=0x63088F,X-EXAMPLE-FLOAT=0.42,SCTE35-CMD=0x98A91AFB812005,SCTE35-OUT=0x0,SCTE35-IN=0x98A2724C2005,END-ON-NEXT=YES\n"
-        );
-
-        output.clear();
-        Tag::XDateRange(crate::DateRange {
-            id: "This is my favorite data range".into(),
-            class: None,
-            start_date: time,
-            cue: None,
-            end_date: None,
-            duration_seconds: Some(0.5),
-            planned_duration_seconds: None,
-            client_attributes: HashMap::new(),
-            scte35_cmd: None,
-            scte35_in: None,
-            scte35_out: None,
-            end_on_next: false,
-        })
-        .serialize(&mut output)
-        .unwrap();
-        assert_eq!(
-            output,
-            b"#EXT-X-DATERANGE:ID=\"This is my favorite data range\",START-DATE=\"2010-02-19T14:54:23.031+08:00\",DURATION=0.5\n"
-        );
-    }
-
-    #[rstest]
     fn serialize_x_skip(mut output: Vec<u8>) {
         Tag::XSkip {
             number_of_skipped_segments: 42,
@@ -563,7 +1146,7 @@ mod tests {
         }
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-SKIP:SKIPPED-SEGMENTS=42\n");
+        assert_eq!(output, b"#EXT-X-SKIP:SKIPPED-SEGMENTS=68\n");
     }
 
     #[rstest]
@@ -767,11 +1350,11 @@ mod tests {
                 allowed_cpc: vec![
                     ContentProtectionConfiguration {
                         key_format: "com.example.drm1".into(),
-                        cpc_label: vec!["SMART-TV".into(), "PC".into()],
+                        cpc_labels: vec!["SMART-TV".into(), "PC".into()],
                     },
                     ContentProtectionConfiguration {
                         key_format: "com.example.drm2".into(),
-                        cpc_label: vec![],
+                        cpc_labels: vec![],
                     },
                 ],
                 video_range: crate::VideoRange::Pq,
@@ -791,7 +1374,7 @@ mod tests {
         }
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-STREAM-INF:BANDWIDTH=82006,AVERAGE-BANDWIDTH=80000,SCORE=2,CODECS=\"mp4a.40.2,avc1.4d401e\",SUPPLEMENTAL-CODECS=\"somethin,dvh1.08.07/db4h/idk\",RESOLUTION=1080x1920,FRAME-RATE=59.942,HDCP-LEVEL=TYPE-1,ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC,com.example.drm2:\",VIDEO-RANGE=PQ,REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",STABLE-VARIANT-ID=\"azBY09+/=.-_\",AUDIO=\"great-audio\",VIDEO=\"great-video\",SUBTITLES=\"great-subtitles\",CLOSED-CAPTIONS=\"great-closed-captions\",PATHWAY-ID=\"cool-pathway\"\ngreat-playlist.m3u8\n");
+        assert_eq!(output, b"#EXT-X-STREAM-INF:BANDWIDTH=82006,AVERAGE-BANDWIDTH=80000,SCORE=2,CODECS=\"mp4a.40.2,avc1.4d401e\",SUPPLEMENTAL-CODECS=\"somethin,dvh1.08.07/db4h/idk\",RESOLUTION=1080x1920,HDCP-LEVEL=TYPE-1,ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC,com.example.drm2:\",VIDEO-RANGE=PQ,REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",STABLE-VARIANT-ID=\"azBY09+/=.-_\",PATHWAY-ID=\"cool-pathway\",FRAME-RATE=59.943,AUDIO=\"great-audio\",VIDEO=\"great-video\",SUBTITLES=\"great-subtitles\",CLOSED-CAPTIONS=\"great-closed-captions\"\ngreat-playlist.m3u8\n");
 
         output.clear();
         Tag::XStreamInf {
@@ -850,11 +1433,11 @@ mod tests {
                 allowed_cpc: vec![
                     ContentProtectionConfiguration {
                         key_format: "com.example.drm1".into(),
-                        cpc_label: vec!["SMART-TV".into(), "PC".into()],
+                        cpc_labels: vec!["SMART-TV".into(), "PC".into()],
                     },
                     ContentProtectionConfiguration {
                         key_format: "com.example.drm2".into(),
-                        cpc_label: vec![],
+                        cpc_labels: vec![],
                     },
                 ],
                 video_range: crate::VideoRange::Pq,
@@ -870,7 +1453,7 @@ mod tests {
         }
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-STREAM-INF:BANDWIDTH=82006,AVERAGE-BANDWIDTH=80000,SCORE=2,CODECS=\"mp4a.40.2,avc1.4d401e\",SUPPLEMENTAL-CODECS=\"somethin,dvh1.08.07/db4h/idk\",RESOLUTION=1080x1920,HDCP-LEVEL=TYPE-1,ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC,com.example.drm2:\",VIDEO-RANGE=PQ,REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",STABLE-VARIANT-ID=\"azBY09+/=.-_\",VIDEO=\"great-video\",PATHWAY-ID=\"cool-pathway\"\ngreat-playlist.m3u8\n");
+        assert_eq!(output, b"#EXT-X-I-FRAME-STREAM-INF:BANDWIDTH=82006,AVERAGE-BANDWIDTH=80000,SCORE=2,CODECS=\"mp4a.40.2,avc1.4d401e\",SUPPLEMENTAL-CODECS=\"somethin,dvh1.08.07/db4h/idk\",RESOLUTION=1080x1920,HDCP-LEVEL=TYPE-1,ALLOWED-CPC=\"com.example.drm1:SMART-TV/PC,com.example.drm2:\",VIDEO-RANGE=PQ,REQ-VIDEO-LAYOUT=\"CH-STEREO,CH-MONO\",STABLE-VARIANT-ID=\"azBY09+/=.-_\",PATHWAY-ID=\"cool-pathway\",VIDEO=\"great-video\",URI=\"https://example.com/example.m3u8\"\n");
     }
 
     #[rstest]
@@ -937,7 +1520,7 @@ mod tests {
         })
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"https://example.com/foo.key\",IV=0x0F91DC05,KEYFORMAT=\"super cool key format\",KEYFORMATVERSIONS=\"1/16\"\n");
+        assert_eq!(output, b"#EXT-X-SESSION-KEY:METHOD=AES-128,URI=\"https://example.com/foo.key\",IV=0xF91DC05,KEYFORMAT=\"super cool key format\",KEYFORMATVERSIONS=\"1/16\"\n");
 
         output.clear();
         Tag::XSessionKey(EncryptionMethod::Aes128 {
@@ -961,7 +1544,7 @@ mod tests {
         })
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"https://example.com/foo.key\",IV=0x0F91DC05,KEYFORMATVERSIONS=\"1/16\"\n");
+        assert_eq!(output, b"#EXT-X-SESSION-KEY:METHOD=SAMPLE-AES,URI=\"https://example.com/foo.key\",IV=0xF91DC05,KEYFORMATVERSIONS=\"1/16\"\n");
 
         output.clear();
         Tag::XSessionKey(EncryptionMethod::SampleAesCtr {

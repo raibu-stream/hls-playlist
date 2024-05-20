@@ -16,8 +16,6 @@
 
 mod serialize;
 
-use std::time::SystemTime;
-
 /// A representation of all possible tags.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tag {
@@ -73,7 +71,7 @@ pub enum Tag {
 
     /// The EXT-X-PROGRAM-DATE-TIME tag associates the first sample of a
     /// Media Segment with an absolute date and/or time.
-    XProgramDateTime(SystemTime),
+    XProgramDateTime(chrono::DateTime<chrono::FixedOffset>),
 
     /// The EXT-X-GAP tag indicates that the segment URI to which it applies
     /// does not contain media data and SHOULD NOT be loaded by clients.

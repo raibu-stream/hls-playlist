@@ -13,9 +13,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 #![warn(clippy::pedantic, clippy::nursery, clippy::enum_glob_use)]
-#![allow(clippy::module_name_repetitions, clippy::too_many_lines)]
+#![allow(
+    clippy::module_name_repetitions,
+    clippy::too_many_lines,
+    clippy::cognitive_complexity
+)]
 
-use std::{collections::HashMap, num::NonZeroU8, time::SystemTime};
+use std::{collections::HashMap, io, num::NonZeroU8};
 
 pub mod playlist;
 pub mod tags;
@@ -172,7 +176,7 @@ pub struct ContentProtectionConfiguration {
 
     /// Classes of playback device that implements the `key_format`
     /// with a certain level of content protection robustness.
-    pub cpc_label: Vec<String>,
+    pub cpc_labels: Vec<String>,
 }
 
 #[derive(Debug, Clone, PartialEq, Eq)]
@@ -294,13 +298,13 @@ pub struct DateRange {
     pub class: Option<String>,
 
     /// The time at which the `DateRange` begins.
-    pub start_date: SystemTime,
+    pub start_date: chrono::DateTime<chrono::FixedOffset>,
 
     /// Indicates when to trigger an action associated with the `DateRange`.
     pub cue: Option<DateRangeCue>,
 
     /// The time at which the `DateRange` ends.
-    pub end_date: Option<SystemTime>,
+    pub end_date: Option<chrono::DateTime<chrono::FixedOffset>>,
 
     /// The duration of the `DateRange` in seconds.
     pub duration_seconds: Option<f64>,
@@ -313,13 +317,13 @@ pub struct DateRange {
     pub client_attributes: HashMap<String, AttributeValue>,
 
     /// Used to carry SCTE-35 data.
-    pub scte35_cmd: Option<Vec<u8>>,
+    pub scte35_cmd: Vec<u8>,
 
     /// Used to carry SCTE-35 data.
-    pub scte35_in: Option<Vec<u8>>,
+    pub scte35_in: Vec<u8>,
 
     /// Used to carry SCTE-35 data
-    pub scte35_out: Option<Vec<u8>>,
+    pub scte35_out: Vec<u8>,
 
     /// Indicates that the end of the `DateRange` is equal to the `start_date`
     /// of the range that is closest in time after this `DateRange` and has the same schema
@@ -465,4 +469,243 @@ pub enum DefinitionType {
 pub enum FloatOrInteger {
     Float(f64),
     Integer(u64),
+}
+
+impl ByteRange {
+    fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        write!(output, "{}", self.length_bytes)?;
+        if let Some(start_offset_bytes) = self.start_offset_bytes {
+            write!(output, "@{start_offset_bytes}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ByteRangeWithOffset {
+    fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        write!(output, "{}@{}", self.length_bytes, self.start_offset_bytes)
+    }
+}
+
+impl EncryptionMethod {
+    fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        match self {
+            Self::Aes128 { uri, .. } => write!(output, "METHOD=AES-128,URI=\"{uri}\"")?,
+            Self::SampleAes { uri, .. } => write!(output, "METHOD=SAMPLE-AES,URI=\"{uri}\"")?,
+            Self::SampleAesCtr { uri, .. } => {
+                write!(output, "METHOD=SAMPLE-AES-CTR,URI=\"{uri}\"")?;
+            }
+        }
+
+        match self {
+            Self::Aes128 { iv: Some(iv), .. } | Self::SampleAes { iv: Some(iv), .. } => {
+                write!(output, ",IV={iv:#X}")?;
+            }
+            _ => (),
+        }
+
+        if let Self::Aes128 {
+            key_format: KeyFormat::Other(key_format),
+            ..
+        } = self
+        {
+            write!(output, ",KEYFORMAT=\"{key_format}\"")?;
+        }
+
+        match self {
+            Self::Aes128 {
+                key_format_versions,
+                ..
+            }
+            | Self::SampleAes {
+                key_format_versions,
+                ..
+            }
+            | Self::SampleAesCtr {
+                key_format_versions,
+                ..
+            } => {
+                if !(key_format_versions.is_empty()
+                    || key_format_versions.len() == 1 && key_format_versions[0] == 1)
+                {
+                    write!(output, ",KEYFORMATVERSIONS=\"")?;
+
+                    if key_format_versions.len() == 1 {
+                        write!(output, "{}", key_format_versions[0])?;
+                    } else {
+                        for (i, version) in key_format_versions.iter().enumerate() {
+                            if i == key_format_versions.len() - 1 {
+                                write!(output, "{version}")?;
+                            } else {
+                                write!(output, "{version}/")?;
+                            }
+                        }
+                    }
+
+                    write!(output, "\"")?;
+                }
+            }
+        }
+
+        Ok(())
+    }
+}
+
+impl StreamInf {
+    fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        write!(output, "BANDWIDTH={}", self.bandwidth_bits_per_second)?;
+
+        if let Some(average_bandwidth) = self.average_bandwidth_bits_per_second {
+            write!(output, ",AVERAGE-BANDWIDTH={average_bandwidth}")?;
+        }
+
+        if let Some(score) = self.score {
+            write!(output, ",SCORE={score}")?;
+        }
+
+        if !self.codecs.is_empty() {
+            write!(output, ",CODECS=\"")?;
+
+            if self.codecs.len() == 1 {
+                write!(output, "{}", self.codecs[0])?;
+            } else {
+                for (i, codec) in self.codecs.iter().enumerate() {
+                    if i == self.codecs.len() - 1 {
+                        write!(output, "{codec}")?;
+                    } else {
+                        write!(output, "{codec},")?;
+                    }
+                }
+            }
+
+            write!(output, "\"")?;
+        }
+
+        if !self.supplemental_codecs.is_empty() {
+            write!(output, ",SUPPLEMENTAL-CODECS=\"")?;
+
+            if self.supplemental_codecs.len() == 1 {
+                self.supplemental_codecs[0].serialize(&mut output)?;
+            } else {
+                for (i, supplemental_codec) in self.supplemental_codecs.iter().enumerate() {
+                    supplemental_codec.serialize(&mut output)?;
+                    if i != self.supplemental_codecs.len() - 1 {
+                        write!(output, ",")?;
+                    }
+                }
+            }
+
+            write!(output, "\"")?;
+        }
+
+        if let Some(resolution) = &self.resolution {
+            write!(
+                output,
+                ",RESOLUTION={}x{}",
+                resolution.width, resolution.height
+            )?;
+        }
+
+        if let Some(level) = &self.hdcp_level {
+            match level {
+                HdcpLevel::None => write!(output, ",HDCP-LEVEL=NONE")?,
+                HdcpLevel::Type0 => write!(output, ",HDCP-LEVEL=TYPE-0")?,
+                HdcpLevel::Type1 => write!(output, ",HDCP-LEVEL=TYPE-1")?,
+            }
+        }
+
+        if !self.allowed_cpc.is_empty() {
+            write!(output, ",ALLOWED-CPC=\"")?;
+
+            if self.allowed_cpc.len() == 1 {
+                self.allowed_cpc[0].serialize(&mut output)?;
+            } else {
+                for (i, config) in self.allowed_cpc.iter().enumerate() {
+                    config.serialize(&mut output)?;
+                    if i != self.allowed_cpc.len() - 1 {
+                        write!(output, ",")?;
+                    }
+                }
+            }
+
+            write!(output, "\"")?;
+        }
+
+        match &self.video_range {
+            VideoRange::Sdr => (),
+            VideoRange::Hlg => write!(output, ",VIDEO-RANGE=HLG")?,
+            VideoRange::Pq => write!(output, ",VIDEO-RANGE=PQ")?,
+            VideoRange::Other(other) => write!(output, ",VIDEO-RANGE={other}")?,
+        }
+
+        if !(self.required_video_layout.is_empty()
+            || (self.required_video_layout.len() == 1
+                && matches!(self.required_video_layout[0], VideoChannelSpecifier::Mono)))
+        {
+            write!(output, ",REQ-VIDEO-LAYOUT=\"")?;
+
+            if self.required_video_layout.len() == 1 {
+                #[allow(clippy::match_on_vec_items)]
+                match self.required_video_layout[0] {
+                    VideoChannelSpecifier::Stereo => write!(output, "CH-STEREO")?,
+                    VideoChannelSpecifier::Mono => unreachable!(),
+                }
+            } else {
+                for (i, config) in self.required_video_layout.iter().enumerate() {
+                    match config {
+                        VideoChannelSpecifier::Stereo => write!(output, "CH-STEREO")?,
+                        VideoChannelSpecifier::Mono => write!(output, "CH-MONO")?,
+                    }
+                    if i != self.required_video_layout.len() - 1 {
+                        write!(output, ",")?;
+                    }
+                }
+            }
+
+            write!(output, "\"")?;
+        }
+
+        if let Some(id) = &self.stable_variant_id {
+            write!(output, ",STABLE-VARIANT-ID=\"{id}\"")?;
+        }
+
+        if let Some(id) = &self.pathway_id {
+            write!(output, ",PATHWAY-ID=\"{id}\"")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl SupplementalCodec {
+    fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        write!(output, "{}", self.supplemental_codec)?;
+
+        for brand in &self.compatibility_brands {
+            write!(output, "/{brand}")?;
+        }
+
+        Ok(())
+    }
+}
+
+impl ContentProtectionConfiguration {
+    fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+        write!(output, "{}:", self.key_format)?;
+
+        if self.cpc_labels.len() == 1 {
+            write!(output, "{}", self.cpc_labels[0])?;
+        } else {
+            for (i, label) in self.cpc_labels.iter().enumerate() {
+                if i == self.cpc_labels.len() - 1 {
+                    write!(output, "{label}")?;
+                } else {
+                    write!(output, "{label}/")?;
+                }
+            }
+        }
+
+        Ok(())
+    }
 }

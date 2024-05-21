@@ -753,12 +753,11 @@ impl Tag {
 
 #[cfg(test)]
 mod tests {
-    use std::{collections::HashMap, time::Duration};
 
     use rstest::*;
 
     use crate::{
-        tags::MediaType, AttributeValue, ContentProtectionConfiguration, EncryptionMethod,
+        tags::MediaType, ContentProtectionConfiguration, EncryptionMethod,
         RenditionPlaybackPriority, SupplementalCodec, VideoChannelSpecifier,
     };
 

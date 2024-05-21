@@ -18,12 +18,14 @@
     clippy::too_many_lines,
     clippy::cognitive_complexity
 )]
+#![cfg_attr(docsrs, feature(doc_cfg))]
 
 use std::{collections::HashMap, io, num::NonZeroU8};
 
 pub mod playlist;
 pub mod tags;
 
+#[cfg_attr(docsrs, doc(cfg(feature = "steering-manifest")))]
 #[cfg(feature = "steering-manifest")]
 pub mod steering_manifest;
 
@@ -279,10 +281,10 @@ pub enum KeyFormat {
     Other(String),
 }
 
-/// Identifies a [`crate::steering_manifest::SteeringManifest`].
+/// Identifies a [`steering_manifest::SteeringManifest`].
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct ContentSteering {
-    /// The URI identifying the [`crate::steering_manifest::SteeringManifest`].
+    /// The URI identifying the [`steering_manifest::SteeringManifest`].
     pub server_uri: String,
     pub pathway_id: Option<String>,
 }

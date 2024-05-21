@@ -115,7 +115,7 @@ pub struct AudioRendition {
     pub channels: Option<crate::AudioChannelInformation>,
 
     /// Information about this rendition.
-    info: RenditionInfo,
+    pub info: RenditionInfo,
 
     /// The URI that identifies the Media Playlist file.
     pub uri: Option<String>,
@@ -244,8 +244,8 @@ pub struct MediaPlaylist {
     /// True if no more Media Segments will be added to the Media Playlist file.
     pub finished: bool,
 
-    /// Whether or not the playlist is for a live mutable stream, or a
-    /// static immutable stream. `Vod` playlists cannot change.
+    /// Whether or not the playlist is for a mutable append-only stream, or a
+    /// static immutable stream.
     pub playlist_type: Option<crate::PlaylistType>,
 
     /// If Some, indicates the server-recommended minimum distance from

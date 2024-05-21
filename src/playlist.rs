@@ -14,10 +14,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-use std::{io, time::SystemTime};
-
-use crate::tags::Tag;
-
 /// A playlist representing a list of renditions and variants of a given piece of media.
 pub struct MultivariantPlaylist {
     /// True if all media samples in a Media Segment can be decoded without information
@@ -240,7 +236,12 @@ pub struct MediaPlaylist {
 
     /// The media sequence number of the first segment in [`MediaPlaylist::segments`].
     pub first_media_sequence_number: u64,
-    // pub discontinuity_sequence_number: todo!(), // TODO: What is this?
+
+    /// Allows synchronization between different renditions of the same `VariantStream`
+    /// or different `VariantStream`s that have EXT-X-DISCONTINUITY tags in their
+    /// Media Playlists.
+    pub discontinuity_sequence_number: u64,
+
     /// True if no more Media Segments will be added to the Media Playlist file.
     pub finished: bool,
 
@@ -346,7 +347,7 @@ pub struct MediaSegment {
 
     /// If Some, the first sample of the `MediaSegment` is associated with this
     /// time.
-    pub absolute_time: Option<SystemTime>,
+    pub absolute_time: Option<chrono::DateTime<chrono::FixedOffset>>,
 
     /// If true, this `MediaSegment` does not contain media data
     /// and should not be loaded by clients.
@@ -410,201 +411,200 @@ pub struct StartOffset {
     pub is_precise: bool,
 }
 
-impl MediaPlaylist {
-    /// Serializes the `MediaPlaylist` as a extended M3U playlist into `output`.
-    /// Guaranteed to write valid UTF-8 only.
-    ///
-    /// This method makes lots of small calls to write on `output`. If the implementation
-    /// of write on `output` makes a syscall, like with a `TcpStream`, you should wrap it
-    /// in a [`std::io::BufWriter`].
-    ///
-    /// # Errors
-    ///
-    /// May return `Err` when encountering an io error on `output`.
-    pub fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
-        Tag::M3u.serialize(&mut output)?;
-        todo!();
-    }
-}
+// impl MediaPlaylist {
+//     /// Serializes the `MediaPlaylist` as a extended M3U playlist into `output`.
+//     /// Guaranteed to write valid UTF-8 only.
+//     ///
+//     /// This method makes lots of small calls to write on `output`. If the implementation
+//     /// of write on `output` makes a syscall, like with a `TcpStream`, you should wrap it
+//     /// in a [`std::io::BufWriter`].
+//     ///
+//     /// # Errors
+//     ///
+//     /// May return `Err` when encountering an io error on `output`.
+//     pub fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
+//         Tag::M3u.serialize(&mut output)?;
+//         todo!();
+//     }
+// }
 
-#[cfg(test)]
-mod tests {
-    use crate::{EncryptionMethod, FloatOrInteger, PreloadHint};
+// #[cfg(test)]
+// mod tests {
+//     use crate::{EncryptionMethod, FloatOrInteger, PreloadHint};
 
-    use super::*;
+//     use super::*;
 
-    #[test]
-    fn serialize_media_playlist() {
-        let mut output = Vec::new();
+//     #[test]
+//     fn serialize_media_playlist() {
+//         let mut output = Vec::new();
 
-        let playlist = MediaPlaylist {
-            segments: vec![
-                MediaSegment {
-                    uri: "https://example.com/1.mp4".into(),
-                    duration_seconds: FloatOrInteger::Float(5.045),
-                    title: Some("This is the first thingy!".into()),
-                    byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(8000)),
-                    is_discontinuity: false,
-                    encryption: Some(EncryptionMethod::Aes128 {
-                        uri: "https://example.com/key.key".into(),
-                        iv: Some(0x0F91_DC05),
-                        key_format: crate::KeyFormat::Identity,
-                        key_format_versions: vec![1, 7, 6],
-                    }),
-                    media_initialization_section: Some(MediaInitializationSection {
-                        uri: "https://example.com/1.mp4".into(),
-                        range: Some(crate::ByteRangeWithOffset {
-                            length_bytes: 400,
-                            start_offset_bytes: 0,
-                        }),
-                    }),
-                    absolute_time: Some(SystemTime::now()),
-                    is_gap: false,
-                    parts: vec![
-                        PartialSegment {
-                            uri: "https://example.com/1.mp4".into(),
-                            duration_in_seconds: 5.045 / 2.0,
-                            is_independent: true,
-                            byte_range: Some(crate::ByteRange {
-                                length_bytes: 400,
-                                start_offset_bytes: None,
-                            }),
-                            is_gap: false,
-                        },
-                        PartialSegment {
-                            uri: "https://example.com/1.mp4".into(),
-                            duration_in_seconds: 5.045 / 2.0,
-                            is_independent: false,
-                            byte_range: Some(crate::ByteRange {
-                                length_bytes: 400,
-                                start_offset_bytes: Some(400),
-                            }),
-                            is_gap: false,
-                        },
-                    ],
-                },
-                MediaSegment {
-                    uri: "https://example.com/2.mp4".into(),
-                    duration_seconds: FloatOrInteger::Float(5.045),
-                    title: Some("This is the second thingy!".into()),
-                    byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(8000)),
-                    is_discontinuity: false,
-                    encryption: Some(EncryptionMethod::Aes128 {
-                        uri: "https://example.com/key.key".into(),
-                        iv: Some(0x0F91_DC05),
-                        key_format: crate::KeyFormat::Identity,
-                        key_format_versions: vec![1, 7, 6],
-                    }),
-                    media_initialization_section: Some(MediaInitializationSection {
-                        uri: "https://example.com/1.mp4".into(),
-                        range: Some(crate::ByteRangeWithOffset {
-                            length_bytes: 400,
-                            start_offset_bytes: 0,
-                        }),
-                    }),
-                    absolute_time: None,
-                    is_gap: false,
-                    parts: vec![
-                        PartialSegment {
-                            uri: "https://example.com/2.mp4".into(),
-                            duration_in_seconds: 5.045 / 2.0,
-                            is_independent: true,
-                            byte_range: Some(crate::ByteRange {
-                                length_bytes: 400,
-                                start_offset_bytes: None,
-                            }),
-                            is_gap: false,
-                        },
-                        PartialSegment {
-                            uri: "https://example.com/2.mp4".into(),
-                            duration_in_seconds: 5.045 / 2.0,
-                            is_independent: false,
-                            byte_range: Some(crate::ByteRange {
-                                length_bytes: 400,
-                                start_offset_bytes: Some(400),
-                            }),
-                            is_gap: false,
-                        },
-                    ],
-                },
-                MediaSegment {
-                    uri: "https://example.com/3.mp4".into(),
-                    duration_seconds: FloatOrInteger::Float(5.045),
-                    title: Some("This is the third thingy!".into()),
-                    byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(5000)),
-                    is_discontinuity: false,
-                    encryption: None,
-                    media_initialization_section: None,
-                    absolute_time: None,
-                    is_gap: false,
-                    parts: vec![
-                        PartialSegment {
-                            uri: "https://example.com/3.mp4".into(),
-                            duration_in_seconds: 5.045 / 2.0,
-                            is_independent: true,
-                            byte_range: Some(crate::ByteRange {
-                                length_bytes: 400,
-                                start_offset_bytes: None,
-                            }),
-                            is_gap: false,
-                        },
-                        PartialSegment {
-                            uri: "https://example.com/3.mp4".into(),
-                            duration_in_seconds: 5.045 / 2.0,
-                            is_independent: false,
-                            byte_range: Some(crate::ByteRange {
-                                length_bytes: 400,
-                                start_offset_bytes: Some(400),
-                            }),
-                            is_gap: false,
-                        },
-                    ],
-                },
-            ],
-            start_offset: Some(StartOffset {
-                offset_in_seconds: 2.0,
-                is_precise: false,
-            }),
-            variables: vec![("cool".into(), "foo".into())],
-            is_independent_segments: false,
-            target_duration: 5,
-            first_media_sequence_number: 0,
-            finished: false,
-            playlist_type: Some(crate::PlaylistType::Event),
-            hold_back_seconds: None,
-            part_information: Some(PartInformation {
-                part_hold_back_seconds: 3.0 * 3.0,
-                part_target_duration: 3,
-            }),
-            iframes_only: false,
-            playlist_delta_updates_information: Some(crate::DeltaUpdateInfo {
-                skip_boundary_seconds: 3.0 * 6.0,
-                can_skip_dateranges: true,
-            }),
-            supports_blocking_playlist_reloads: true,
-            metadata: MediaMetadata {
-                date_ranges: vec![],
-                skip: None,
-                preload_hints: vec![PreloadHint {
-                    hint_type: crate::PreloadHintType::Part,
-                    uri: "https://example.com/4.mp4".into(),
-                    start_byte_offset: 0,
-                    length_in_bytes: Some(400),
-                }],
-                rendition_reports: vec![crate::RenditionReport {
-                    uri: Some("https://example.com/different.m3u8".into()),
-                    last_sequence_number: None,
-                    last_part_index: None,
-                }],
-            },
-        };
+//         let playlist = MediaPlaylist {
+//             segments: vec![
+//                 MediaSegment {
+//                     uri: "https://example.com/1.mp4".into(),
+//                     duration_seconds: FloatOrInteger::Float(5.045),
+//                     title: Some("This is the first thingy!".into()),
+//                     byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(8000)),
+//                     is_discontinuity: false,
+//                     encryption: Some(EncryptionMethod::Aes128 {
+//                         uri: "https://example.com/key.key".into(),
+//                         iv: Some(0x0F91_DC05),
+//                         key_format: crate::KeyFormat::Identity,
+//                         key_format_versions: vec![1, 7, 6],
+//                     }),
+//                     media_initialization_section: Some(MediaInitializationSection {
+//                         uri: "https://example.com/1.mp4".into(),
+//                         range: Some(crate::ByteRangeWithOffset {
+//                             length_bytes: 400,
+//                             start_offset_bytes: 0,
+//                         }),
+//                     }),
+//                     absolute_time: Some(SystemTime::now()),
+//                     is_gap: false,
+//                     parts: vec![
+//                         PartialSegment {
+//                             uri: "https://example.com/1.mp4".into(),
+//                             duration_in_seconds: 5.045 / 2.0,
+//                             is_independent: true,
+//                             byte_range: Some(crate::ByteRange {
+//                                 length_bytes: 400,
+//                                 start_offset_bytes: None,
+//                             }),
+//                             is_gap: false,
+//                         },
+//                         PartialSegment {
+//                             uri: "https://example.com/1.mp4".into(),
+//                             duration_in_seconds: 5.045 / 2.0,
+//                             is_independent: false,
+//                             byte_range: Some(crate::ByteRange {
+//                                 length_bytes: 400,
+//                                 start_offset_bytes: Some(400),
+//                             }),
+//                             is_gap: false,
+//                         },
+//                     ],
+//                 },
+//                 MediaSegment {
+//                     uri: "https://example.com/2.mp4".into(),
+//                     duration_seconds: FloatOrInteger::Float(5.045),
+//                     title: Some("This is the second thingy!".into()),
+//                     byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(8000)),
+//                     is_discontinuity: false,
+//                     encryption: Some(EncryptionMethod::Aes128 {
+//                         uri: "https://example.com/key.key".into(),
+//                         iv: Some(0x0F91_DC05),
+//                         key_format: crate::KeyFormat::Identity,
+//                         key_format_versions: vec![1, 7, 6],
+//                     }),
+//                     media_initialization_section: Some(MediaInitializationSection {
+//                         uri: "https://example.com/1.mp4".into(),
+//                         range: Some(crate::ByteRangeWithOffset {
+//                             length_bytes: 400,
+//                             start_offset_bytes: 0,
+//                         }),
+//                     }),
+//                     absolute_time: None,
+//                     is_gap: false,
+//                     parts: vec![
+//                         PartialSegment {
+//                             uri: "https://example.com/2.mp4".into(),
+//                             duration_in_seconds: 5.045 / 2.0,
+//                             is_independent: true,
+//                             byte_range: Some(crate::ByteRange {
+//                                 length_bytes: 400,
+//                                 start_offset_bytes: None,
+//                             }),
+//                             is_gap: false,
+//                         },
+//                         PartialSegment {
+//                             uri: "https://example.com/2.mp4".into(),
+//                             duration_in_seconds: 5.045 / 2.0,
+//                             is_independent: false,
+//                             byte_range: Some(crate::ByteRange {
+//                                 length_bytes: 400,
+//                                 start_offset_bytes: Some(400),
+//                             }),
+//                             is_gap: false,
+//                         },
+//                     ],
+//                 },
+//                 MediaSegment {
+//                     uri: "https://example.com/3.mp4".into(),
+//                     duration_seconds: FloatOrInteger::Float(5.045),
+//                     title: Some("This is the third thingy!".into()),
+//                     byte_range_or_bitrate: Some(ByteRangeOrBitrate::Bitrate(5000)),
+//                     is_discontinuity: false,
+//                     encryption: None,
+//                     media_initialization_section: None,
+//                     absolute_time: None,
+//                     is_gap: false,
+//                     parts: vec![
+//                         PartialSegment {
+//                             uri: "https://example.com/3.mp4".into(),
+//                             duration_in_seconds: 5.045 / 2.0,
+//                             is_independent: true,
+//                             byte_range: Some(crate::ByteRange {
+//                                 length_bytes: 400,
+//                                 start_offset_bytes: None,
+//                             }),
+//                             is_gap: false,
+//                         },
+//                         PartialSegment {
+//                             uri: "https://example.com/3.mp4".into(),
+//                             duration_in_seconds: 5.045 / 2.0,
+//                             is_independent: false,
+//                             byte_range: Some(crate::ByteRange {
+//                                 length_bytes: 400,
+//                                 start_offset_bytes: Some(400),
+//                             }),
+//                             is_gap: false,
+//                         },
+//                     ],
+//                 },
+//             ],
+//             start_offset: Some(StartOffset {
+//                 offset_in_seconds: 2.0,
+//                 is_precise: false,
+//             }),
+//             variables: vec![("cool".into(), "foo".into())],
+//             is_independent_segments: false,
+//             target_duration: 5,
+//             first_media_sequence_number: 0,
+//             finished: false,
+//             playlist_type: Some(crate::PlaylistType::Event),
+//             hold_back_seconds: None,
+//             part_information: Some(PartInformation {
+//                 part_hold_back_seconds: 3.0 * 3.0,
+//                 part_target_duration: 3,
+//             }),
+//             iframes_only: false,
+//             playlist_delta_updates_information: Some(crate::DeltaUpdateInfo {
+//                 skip_boundary_seconds: 3.0 * 6.0,
+//                 can_skip_dateranges: true,
+//             }),
+//             supports_blocking_playlist_reloads: true,
+//             metadata: MediaMetadata {
+//                 date_ranges: vec![],
+//                 skip: None,
+//                 preload_hints: vec![PreloadHint {
+//                     hint_type: crate::PreloadHintType::Part,
+//                     uri: "https://example.com/4.mp4".into(),
+//                     start_byte_offset: 0,
+//                     length_in_bytes: Some(400),
+//                 }],
+//                 rendition_reports: vec![crate::RenditionReport {
+//                     uri: Some("https://example.com/different.m3u8".into()),
+//                     last_sequence_number: None,
+//                     last_part_index: None,
+//                 }],
+//             },
+//         };
 
-        playlist.serialize(&mut output).unwrap();
+//         playlist.serialize(&mut output).unwrap();
 
-        assert_eq!(
-            String::from_utf8(output).unwrap(),
-            "#EXTM3U
-#EXT-X-VERSION:todo"
-        );
-    }
-}
+//         assert_eq!(
+//             String::from_utf8(output).unwrap(),
+//             "TODO"
+//         );
+//     }
+// }

@@ -19,14 +19,14 @@ mod serialize;
 /// A representation of all possible tags.
 #[derive(Debug, Clone, PartialEq)]
 pub enum Tag {
+    /// The EXTM3U tag indicates that the file is an Extended M3U Playlist file.
+    M3u,
+
     /// The EXT-X-VERSION tag indicates the compatibility version of the
     /// Playlist file, its associated media, and its server.
     XVersion {
         version: u8,
     },
-
-    /// The EXTM3U tag indicates that the file is an Extended M3U Playlist file.
-    M3u,
 
     /// The EXT-X-DEFINE tag provides a Playlist variable definition or
     /// declaration.

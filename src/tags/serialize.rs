@@ -1,3 +1,17 @@
+// Copyright 2024 Logan Wemyss
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     http://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
 use std::io;
 
 use crate::{
@@ -15,13 +29,18 @@ impl Tag {
     /// of write on `output` makes a syscall, like with a `TcpStream`, you should wrap it
     /// in a [`std::io::BufWriter`].
     ///
+    /// # Note
+    ///
+    /// This method is not guaranteed to write valid M3U tags. It's your job to create
+    /// valid cinput.
+    ///
     /// # Errors
     ///
     /// May return `Err` when encountering an io error on `output`.
     pub fn serialize(&self, mut output: impl io::Write) -> io::Result<()> {
         match self {
-            Self::XVersion { version } => write!(output, "#EXT-X-VERSION:{version}")?,
             Self::M3u => output.write_all(b"#EXTM3U")?,
+            Self::XVersion { version } => write!(output, "#EXT-X-VERSION:{version}")?,
             Self::XDefine(definition) => match definition {
                 crate::DefinitionType::Inline { name, value } => {
                     write!(output, "#EXT-X-DEFINE:NAME=\"{name}\",VALUE=\"{value}\"")?;

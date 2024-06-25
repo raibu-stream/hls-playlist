@@ -32,7 +32,7 @@ impl Tag {
     /// # Note
     ///
     /// This method is not guaranteed to write valid M3U tags. It's your job to create
-    /// valid cinput.
+    /// valid input.
     ///
     /// # Errors
     ///
@@ -65,12 +65,17 @@ impl Tag {
             Self::Inf {
                 duration_seconds,
                 title,
-            } => match duration_seconds {
-                crate::FloatOrInteger::Float(float) => write!(output, "#EXTINF:{float},{title}")?,
-                crate::FloatOrInteger::Integer(integer) => {
-                    write!(output, "#EXTINF:{integer},{title}")?;
+            } => {
+                match duration_seconds {
+                    crate::FloatOrInteger::Float(float) => write!(output, "#EXTINF:{float}")?,
+                    crate::FloatOrInteger::Integer(integer) => {
+                        write!(output, "#EXTINF:{integer}")?;
+                    }
+                };
+                if !title.is_empty() {
+                    write!(output, ",{title}")?;
                 }
-            },
+            }
             Self::XByterange(byte_range) => {
                 write!(output, "#EXT-X-BYTERANGE:")?;
                 byte_range.serialize(&mut output)?;
@@ -88,8 +93,9 @@ impl Tag {
             Self::XMap { uri, range } => {
                 write!(output, "#EXT-X-MAP:URI=\"{uri}\"")?;
                 if let Some(range) = range {
-                    write!(output, ",BYTERANGE=")?;
+                    write!(output, ",BYTERANGE=\"")?;
                     range.serialize(&mut output)?;
+                    write!(output, "\"")?;
                 }
             }
             Self::XProgramDateTime(time) => {
@@ -508,31 +514,15 @@ impl Tag {
         mut output: impl io::Write,
         report: &RenditionReport,
     ) -> io::Result<()> {
-        let mut has_written_attribute = false;
-        write!(output, "#EXT-X-RENDITION-REPORT:")?;
-
-        if let Some(uri) = &report.uri {
-            has_written_attribute = true;
-
-            write!(output, "URI=\"{uri}\"")?;
-        }
+        let uri = &report.uri;
+        write!(output, "#EXT-X-RENDITION-REPORT:URI=\"{uri}\"")?;
 
         if let Some(last_sequence_number) = report.last_sequence_number {
-            if has_written_attribute {
-                write!(output, ",LAST-MSN={last_sequence_number}")?;
-            } else {
-                write!(output, "LAST-MSN={last_sequence_number}")?;
-            }
-
-            has_written_attribute = true;
+            write!(output, ",LAST-MSN={last_sequence_number}")?;
         }
 
         if let Some(last_part_index) = report.last_part_index {
-            if has_written_attribute {
-                write!(output, ",LAST-PART={last_part_index}")?;
-            } else {
-                write!(output, "LAST-PART={last_part_index}")?;
-            }
+            write!(output, ",LAST-PART={last_part_index}")?;
         }
 
         Ok(())
@@ -704,8 +694,9 @@ impl Tag {
         }
 
         if let Some(byte_range) = byte_range {
-            write!(output, ",BYTERANGE=")?;
+            write!(output, ",BYTERANGE=\"")?;
             byte_range.serialize(&mut output)?;
+            write!(output, "\"")?;
         }
 
         if is_gap {
@@ -973,7 +964,7 @@ mod tests {
         }
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXTINF:5.34,\n");
+        assert_eq!(output, b"#EXTINF:5.34\n");
 
         output.clear();
         Tag::Inf {
@@ -1074,7 +1065,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             output,
-            b"#EXT-X-MAP:URI=\"https://example.com/0.mp4\",BYTERANGE=400@0\n"
+            b"#EXT-X-MAP:URI=\"https://example.com/0.mp4\",BYTERANGE=\"400@0\"\n"
         );
 
         output.clear();
@@ -1123,7 +1114,7 @@ mod tests {
         }
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-PART:URI=\"https://example.com/1.mp4\",DURATION=2.5,INDEPENDENT=YES,BYTERANGE=400@0,GAP=YES\n");
+        assert_eq!(output, b"#EXT-X-PART:URI=\"https://example.com/1.mp4\",DURATION=2.5,INDEPENDENT=YES,BYTERANGE=\"400@0\",GAP=YES\n");
 
         output.clear();
         Tag::XPart {
@@ -1140,7 +1131,7 @@ mod tests {
         .unwrap();
         assert_eq!(
             output,
-            b"#EXT-X-PART:URI=\"https://example.com/1.mp4\",DURATION=2.5,BYTERANGE=400\n"
+            b"#EXT-X-PART:URI=\"https://example.com/1.mp4\",DURATION=2.5,BYTERANGE=\"400\"\n"
         );
     }
 
@@ -1197,7 +1188,7 @@ mod tests {
     #[rstest]
     fn serialize_x_rendition_report(mut output: Vec<u8>) {
         Tag::XRenditionReport(crate::RenditionReport {
-            uri: Some("/2.m3u8".into()),
+            uri: "/2.m3u8".into(),
             last_sequence_number: Some(420),
             last_part_index: Some(1),
         })
@@ -1210,13 +1201,13 @@ mod tests {
 
         output.clear();
         Tag::XRenditionReport(crate::RenditionReport {
-            uri: None,
+            uri: "/2.m3u8".into(),
             last_sequence_number: None,
             last_part_index: None,
         })
         .serialize(&mut output)
         .unwrap();
-        assert_eq!(output, b"#EXT-X-RENDITION-REPORT:\n");
+        assert_eq!(output, b"#EXT-X-RENDITION-REPORT:URI=\"/2.m3u8\"\n");
     }
 
     #[rstest]

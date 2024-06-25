@@ -20,6 +20,10 @@ assert_eq!(String::from_utf8(output).unwrap(), "\
 ");
 ```
 
+## Features
+
+* `steering-manifest`: Enables support for serializing and deserializing steering manifests.
+
 ## Roadmap
 
 This library is 100% finished and feature-complete as far as serializing tags goes, but I'd like to eventually implement a serializer for the higher level playlist representation, and also deserialization.

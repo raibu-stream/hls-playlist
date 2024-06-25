@@ -1,4 +1,8 @@
 //! A representation of a HLS steering manifest.
+//!
+//! Content steering allows content producers to group redundant
+//! variant streams into "pathways" and to dynamically prioritize
+//! access to different pathways.
 
 // Copyright 2024 Logan Wemyss
 //

@@ -440,7 +440,7 @@ pub struct DeltaUpdateInfo {
 #[derive(Debug, Clone, PartialEq, Eq)]
 pub struct RenditionReport {
     /// The URI for the `MediaPlaylist` of the specified rendition.
-    pub uri: Option<String>,
+    pub uri: String,
 
     /// The media sequence number of the last `MediaSegment` currently
     /// in the specified Rendition.

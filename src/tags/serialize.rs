@@ -278,7 +278,7 @@ impl Tag {
         }
 
         match playback_priority {
-            RenditionPlaybackPriority::Default => write!(output, ",DEFAULT=YES,AUTOSELECT=YES")?,
+            RenditionPlaybackPriority::Default => write!(output, ",DEFAULT=YES")?,
             RenditionPlaybackPriority::AutoSelect => write!(output, ",AUTOSELECT=YES")?,
             RenditionPlaybackPriority::None => (),
         }
@@ -1239,7 +1239,7 @@ mod tests {
             ],
         };
         tag.serialize(&mut output).unwrap();
-        assert_eq!(output, b"#EXT-X-MEDIA:TYPE=AUDIO,URI=\"https://example.com/1.m3u8\",GROUP-ID=\"really cool group\",LANGUAGE=\"en-US\",ASSOC-LANGUAGE=\"de\",NAME=\"english audio\",STABLE-RENDITION-ID=\"azBY09+/=.-_\",DEFAULT=YES,AUTOSELECT=YES,BIT-DEPTH=16,SAMPLE-RATE=40000,CHARACTERISTICS=\"public.accessibility.describes-video,private.cool.example\",CHANNELS=\"2/idk,This is kinda weird/BINAURAL,IMMERSIVE,DOWNMIX\"\n");
+        assert_eq!(output, b"#EXT-X-MEDIA:TYPE=AUDIO,URI=\"https://example.com/1.m3u8\",GROUP-ID=\"really cool group\",LANGUAGE=\"en-US\",ASSOC-LANGUAGE=\"de\",NAME=\"english audio\",STABLE-RENDITION-ID=\"azBY09+/=.-_\",DEFAULT=YES,BIT-DEPTH=16,SAMPLE-RATE=40000,CHARACTERISTICS=\"public.accessibility.describes-video,private.cool.example\",CHANNELS=\"2/idk,This is kinda weird/BINAURAL,IMMERSIVE,DOWNMIX\"\n");
 
         output.clear();
         if let Tag::XMedia {
@@ -1258,7 +1258,7 @@ mod tests {
             );
         };
         tag.serialize(&mut output).unwrap();
-        assert_eq!(output, b"#EXT-X-MEDIA:TYPE=AUDIO,URI=\"https://example.com/1.m3u8\",GROUP-ID=\"really cool group\",LANGUAGE=\"en-US\",ASSOC-LANGUAGE=\"de\",NAME=\"english audio\",STABLE-RENDITION-ID=\"azBY09+/=.-_\",DEFAULT=YES,AUTOSELECT=YES,BIT-DEPTH=16,SAMPLE-RATE=40000,CHARACTERISTICS=\"public.accessibility.describes-video,private.cool.example\",CHANNELS=\"14/This is kinda weird/\"\n");
+        assert_eq!(output, b"#EXT-X-MEDIA:TYPE=AUDIO,URI=\"https://example.com/1.m3u8\",GROUP-ID=\"really cool group\",LANGUAGE=\"en-US\",ASSOC-LANGUAGE=\"de\",NAME=\"english audio\",STABLE-RENDITION-ID=\"azBY09+/=.-_\",DEFAULT=YES,BIT-DEPTH=16,SAMPLE-RATE=40000,CHARACTERISTICS=\"public.accessibility.describes-video,private.cool.example\",CHANNELS=\"14/This is kinda weird/\"\n");
 
         output.clear();
         if let Tag::XMedia {
@@ -1281,7 +1281,7 @@ mod tests {
             *sample_rate = None;
         };
         tag.serialize(&mut output).unwrap();
-        assert_eq!(output, b"#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"really cool group\",LANGUAGE=\"en-US\",ASSOC-LANGUAGE=\"de\",NAME=\"english audio\",STABLE-RENDITION-ID=\"azBY09+/=.-_\",DEFAULT=YES,AUTOSELECT=YES,CHARACTERISTICS=\"public.accessibility.describes-video,private.cool.example\",CHANNELS=\"6/-\"\n");
+        assert_eq!(output, b"#EXT-X-MEDIA:TYPE=AUDIO,GROUP-ID=\"really cool group\",LANGUAGE=\"en-US\",ASSOC-LANGUAGE=\"de\",NAME=\"english audio\",STABLE-RENDITION-ID=\"azBY09+/=.-_\",DEFAULT=YES,CHARACTERISTICS=\"public.accessibility.describes-video,private.cool.example\",CHANNELS=\"6/-\"\n");
 
         output.clear();
         if let Tag::XMedia {

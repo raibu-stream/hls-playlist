@@ -434,7 +434,6 @@ pub struct DeltaUpdateInfo {
     pub can_skip_dateranges: bool,
 }
 
-// TODO: Can we fill in these fields when deserializing a playlist?
 /// Information about an associated Rendition that is as up-to-date as
 /// the Playlist that contains the report.
 #[derive(Debug, Clone, PartialEq, Eq)]
